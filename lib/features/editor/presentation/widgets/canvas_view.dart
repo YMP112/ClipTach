@@ -13,6 +13,7 @@ class CanvasView extends StatefulWidget {
     required this.onStrokeUpdate,
     required this.onObjectMove,
     required this.onPolygonPointTap,
+    required this.handMode,
     required this.emptyHint,
   });
 
@@ -21,6 +22,7 @@ class CanvasView extends StatefulWidget {
   final ValueChanged<Offset> onStrokeUpdate;
   final ValueChanged<Offset> onObjectMove;
   final ValueChanged<Offset> onPolygonPointTap;
+  final bool handMode;
   final String emptyHint;
 
   @override
@@ -35,6 +37,27 @@ class _CanvasViewState extends State<CanvasView> {
   Offset? _lastScaleFocal;
   double _lastScale = 1;
   int _activePointers = 0;
+  Size _viewportSize = Size.zero;
+  bool _needsAutoCenter = true;
+
+  @override
+  void didUpdateWidget(covariant CanvasView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.sourceImage != widget.state.sourceImage) {
+      _needsAutoCenter = true;
+    }
+    if (oldWidget.state.phase != widget.state.phase) {
+      _needsAutoCenter = true;
+    }
+    if (_needsAutoCenter && _viewportSize != Size.zero) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _autoCenterIfNeeded();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +105,9 @@ class _CanvasViewState extends State<CanvasView> {
               _activePointers > 1) {
             return;
           }
+          if (widget.handMode) {
+            return;
+          }
           if (widget.state.phase == EditorPhase.mask &&
               widget.state.maskTool == MaskTool.brush) {
             widget.onStrokeStart(_toImageSpace(details.localFocalPoint));
@@ -103,6 +129,14 @@ class _CanvasViewState extends State<CanvasView> {
             });
             return;
           }
+          if (widget.handMode) {
+            if (details.focalPointDelta != Offset.zero) {
+              setState(() {
+                _pan += details.focalPointDelta;
+              });
+            }
+            return;
+          }
 
           if (widget.state.phase == EditorPhase.mask &&
               widget.state.maskTool == MaskTool.brush) {
@@ -116,22 +150,62 @@ class _CanvasViewState extends State<CanvasView> {
         onTapDown: (details) {
           if (widget.state.sourceImage == null ||
               widget.state.phase != EditorPhase.mask ||
+              widget.handMode ||
               widget.state.maskTool != MaskTool.polygonKeep) {
             return;
           }
           widget.onPolygonPointTap(_toImageSpace(details.localPosition));
         },
-        child: CustomPaint(
-          painter: _CanvasPainter(
-            state: widget.state,
-            zoom: _zoom,
-            pan: _pan,
-            emptyHint: widget.emptyHint,
-          ),
-          child: const SizedBox.expand(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final nextSize = Size(constraints.maxWidth, constraints.maxHeight);
+            if (nextSize != _viewportSize) {
+              _viewportSize = nextSize;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) {
+                  return;
+                }
+                _autoCenterIfNeeded();
+              });
+            }
+            return CustomPaint(
+              painter: _CanvasPainter(
+                state: widget.state,
+                zoom: _zoom,
+                pan: _pan,
+                emptyHint: widget.emptyHint,
+              ),
+              child: const SizedBox.expand(),
+            );
+          },
         ),
       ),
     );
+  }
+
+  void _autoCenterIfNeeded() {
+    if (!_needsAutoCenter || _viewportSize == Size.zero) {
+      return;
+    }
+    final source = widget.state.sourceImage;
+    if (source == null) {
+      return;
+    }
+
+    final targetX = widget.state.phase == EditorPhase.object
+        ? widget.state.objectPivotX + widget.state.transform.translateX
+        : source.width / 2;
+    final targetY = widget.state.phase == EditorPhase.object
+        ? widget.state.objectPivotY + widget.state.transform.translateY
+        : source.height / 2;
+
+    setState(() {
+      _pan = Offset(
+        _viewportSize.width / 2 - (targetX * _zoom),
+        _viewportSize.height / 2 - (targetY * _zoom),
+      );
+      _needsAutoCenter = false;
+    });
   }
 
   Offset _toImageSpace(Offset local) {

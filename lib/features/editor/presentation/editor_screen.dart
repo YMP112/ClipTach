@@ -49,6 +49,7 @@ class EditorScreen extends ConsumerStatefulWidget {
 
 class _EditorScreenState extends ConsumerState<EditorScreen> {
   var _launchHandled = false;
+  var _handMode = false;
 
   @override
   void didChangeDependencies() {
@@ -145,6 +146,24 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                         onStrokeUpdate: controller.appendStrokePoint,
                         onObjectMove: controller.moveObjectBy,
                         onPolygonPointTap: controller.addPolygonPoint,
+                        handMode: _handMode,
+                      ),
+                    ),
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Card(
+                        child: IconButton(
+                          tooltip: 'מצב יד',
+                          onPressed: () {
+                            setState(() {
+                              _handMode = !_handMode;
+                            });
+                          },
+                          icon: Icon(
+                            _handMode ? Icons.pan_tool_alt : Icons.pan_tool_outlined,
+                          ),
+                        ),
                       ),
                     ),
                     if (state.phase == EditorPhase.object)
@@ -160,6 +179,18 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                IconButton(
+                                  tooltip: 'מצב יד',
+                                  onPressed: () {
+                                    setState(() {
+                                      _handMode = !_handMode;
+                                    });
+                                  },
+                                  icon: Icon(
+                                    _handMode ? Icons.pan_tool_alt : Icons.pan_tool_outlined,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 IconButton(
                                   tooltip: '${loc.t('rotate')} -5',
                                   onPressed: () => controller.nudgeRotation(-5),
@@ -222,11 +253,27 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     if (!mounted) {
       return;
     }
+    final loc = AppLocalizations.of(context);
     final result = await showDialog<_ExportDialogResult>(
       context: context,
       builder: (_) => _ExportDialog(
         initial: initial,
         onPickPath: controller.pickExportPath,
+        labels: _ExportDialogLabels(
+          title: 'ייצוא PNG',
+          location: 'מיקום ייצוא',
+          noPath: 'לא נבחר נתיב',
+          choose: 'בחר...',
+          mode: 'מצב ייצוא',
+          withMargins: 'עם שוליים',
+          objectOnly: 'אובייקט בלבד',
+          objectOnlyHint: 'אובייקט בלבד (מלבן צמוד)',
+          marginsPx: 'שוליים (px):',
+          cancel: 'ביטול',
+          export: loc.t('exportPng'),
+          choosePathError: 'בחר נתיב ייצוא.',
+          marginError: 'ערך שוליים חייב להיות מספר שלם לא שלילי.',
+        ),
       ),
     );
     if (result == null) {
@@ -483,10 +530,12 @@ class _ExportDialog extends StatefulWidget {
   const _ExportDialog({
     required this.initial,
     required this.onPickPath,
+    required this.labels,
   });
 
   final ExportOptions initial;
   final Future<String?> Function() onPickPath;
+  final _ExportDialogLabels labels;
 
   @override
   State<_ExportDialog> createState() => _ExportDialogState();
@@ -516,20 +565,20 @@ class _ExportDialogState extends State<_ExportDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Export PNG'),
+      title: Text(widget.labels.title),
       content: SizedBox(
         width: 440,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Export Location'),
+            Text(widget.labels.location),
             const SizedBox(height: 6),
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    _path ?? 'No path selected',
+                    _path ?? widget.labels.noPath,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -545,22 +594,22 @@ class _ExportDialogState extends State<_ExportDialog> {
                       _path = path;
                     });
                   },
-                  child: const Text('Choose...'),
+                  child: Text(widget.labels.choose),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            const Text('Export Mode'),
+            Text(widget.labels.mode),
             const SizedBox(height: 6),
             SegmentedButton<ExportMode>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: ExportMode.withMargins,
-                  label: Text('With margins'),
+                  label: Text(widget.labels.withMargins),
                 ),
                 ButtonSegment(
                   value: ExportMode.objectOnly,
-                  label: Text('Object only'),
+                  label: Text(widget.labels.objectOnly),
                 ),
               ],
               selected: {_mode},
@@ -571,7 +620,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             if (_mode == ExportMode.withMargins)
               Row(
                 children: [
-                  const Text('Margins (px):'),
+                  Text(widget.labels.marginsPx),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 120,
@@ -590,9 +639,9 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ],
               ),
             if (_mode == ExportMode.objectOnly)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Object only (tight rectangle)'),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(widget.labels.objectOnlyHint),
               ),
             if (_error != null)
               Padding(
@@ -608,27 +657,31 @@ class _ExportDialogState extends State<_ExportDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(widget.labels.cancel),
         ),
         FilledButton(
           onPressed: _onExport,
-          child: const Text('Export'),
+          child: Text(widget.labels.export),
         ),
       ],
     );
   }
 
-  void _onExport() {
+  Future<void> _onExport() async {
     if (_path == null || _path!.isEmpty) {
-      setState(() => _error = 'Please choose an export location.');
-      return;
+      final picked = await widget.onPickPath();
+      if (!mounted || picked == null || picked.isEmpty) {
+        setState(() => _error = widget.labels.choosePathError);
+        return;
+      }
+      _path = picked;
     }
 
     final margin = _mode == ExportMode.withMargins
         ? int.tryParse(_marginController.text.trim())
         : 0;
     if (_mode == ExportMode.withMargins && (margin == null || margin < 0)) {
-      setState(() => _error = 'Margins must be a non-negative integer.');
+      setState(() => _error = widget.labels.marginError);
       return;
     }
 
@@ -642,6 +695,38 @@ class _ExportDialogState extends State<_ExportDialog> {
       ),
     );
   }
+}
+
+class _ExportDialogLabels {
+  const _ExportDialogLabels({
+    required this.title,
+    required this.location,
+    required this.noPath,
+    required this.choose,
+    required this.mode,
+    required this.withMargins,
+    required this.objectOnly,
+    required this.objectOnlyHint,
+    required this.marginsPx,
+    required this.cancel,
+    required this.export,
+    required this.choosePathError,
+    required this.marginError,
+  });
+
+  final String title;
+  final String location;
+  final String noPath;
+  final String choose;
+  final String mode;
+  final String withMargins;
+  final String objectOnly;
+  final String objectOnlyHint;
+  final String marginsPx;
+  final String cancel;
+  final String export;
+  final String choosePathError;
+  final String marginError;
 }
 
 class HomeScreen extends ConsumerStatefulWidget {

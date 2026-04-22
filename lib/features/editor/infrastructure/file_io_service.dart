@@ -56,7 +56,7 @@ class FileIoService {
 
   Future<String?> pickPngSavePath({String? defaultFileName}) {
     return FilePicker.platform.saveFile(
-      dialogTitle: 'Export Transparent PNG',
+      dialogTitle: 'ייצוא PNG',
       fileName: defaultFileName ?? 'result_clear.png',
     );
   }
