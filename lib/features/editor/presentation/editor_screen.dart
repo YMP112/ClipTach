@@ -1,18 +1,101 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../app.dart';
+import '../../../core/services/recent_projects_service.dart';
 import '../../../l10n/app_localizations.dart';
+import '../infrastructure/file_io_service.dart';
 import '../application/editor_controller.dart';
 import '../domain/editor_state.dart';
 import 'widgets/canvas_view.dart';
 import 'widgets/top_toolbar.dart';
 
-class EditorScreen extends ConsumerWidget {
-  const EditorScreen({super.key});
+enum EditorLaunchActionType { none, openImage, loadProject, loadProjectPath }
+
+class EditorLaunchAction {
+  const EditorLaunchAction._({
+    required this.type,
+    this.projectPath,
+  });
+
+  const EditorLaunchAction.none() : this._(type: EditorLaunchActionType.none);
+
+  const EditorLaunchAction.openImage()
+      : this._(type: EditorLaunchActionType.openImage);
+
+  const EditorLaunchAction.loadProject()
+      : this._(type: EditorLaunchActionType.loadProject);
+
+  const EditorLaunchAction.loadProjectPath(String path)
+      : this._(type: EditorLaunchActionType.loadProjectPath, projectPath: path);
+
+  final EditorLaunchActionType type;
+  final String? projectPath;
+}
+
+class EditorScreen extends ConsumerStatefulWidget {
+  const EditorScreen({
+    super.key,
+    this.launchAction = const EditorLaunchAction.none(),
+  });
+
+  final EditorLaunchAction launchAction;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EditorScreen> createState() => _EditorScreenState();
+}
+
+class _EditorScreenState extends ConsumerState<EditorScreen> {
+  var _launchHandled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_launchHandled) {
+      return;
+    }
+    _launchHandled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = ref.read(editorControllerProvider.notifier);
+      final fileIo = FileIoService();
+      try {
+        switch (widget.launchAction.type) {
+          case EditorLaunchActionType.none:
+            break;
+          case EditorLaunchActionType.openImage:
+            final opened = await fileIo.pickImage();
+            if (opened != null) {
+              await controller.openImageBytes(
+                fileName: opened.fileName,
+                bytes: opened.bytes,
+              );
+            }
+            break;
+          case EditorLaunchActionType.loadProject:
+            await controller.loadProject();
+            break;
+          case EditorLaunchActionType.loadProjectPath:
+            final path = widget.launchAction.projectPath;
+            if (path != null && path.isNotEmpty) {
+              await controller.loadProjectFromPath(path);
+            }
+            break;
+        }
+      } catch (e) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
     final state = ref.watch(editorControllerProvider);
     final controller = ref.read(editorControllerProvider.notifier);
     final loc = AppLocalizations.of(context);
@@ -245,5 +328,109 @@ class _ObjectControls extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class HomeScreen extends ConsumerStatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final _recentService = RecentProjectsService();
+  List<String> _recent = const <String>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshRecents();
+  }
+
+  Future<void> _refreshRecents() async {
+    final projects = await _recentService.readRecentProjects();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _recent = projects;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(title: Text(loc.t('appTitle'))),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              loc.t('homeIntro'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _openEditor(const EditorLaunchAction.openImage()),
+                  icon: const Icon(Icons.image_outlined),
+                  label: Text(loc.t('openImage')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _openEditor(const EditorLaunchAction.loadProject()),
+                  icon: const Icon(Icons.folder_open),
+                  label: Text(loc.t('loadProject')),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(loc.t('recentProjects')),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _recent.isEmpty
+                  ? Center(
+                      child: Text(
+                        loc.t('noRecentProjects'),
+                        style: const TextStyle(color: Color(0xFF5D6875)),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: _recent.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final path = _recent[index];
+                        return ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: const BorderSide(color: Color(0xFFCCD2DB)),
+                          ),
+                          title: Text(p.basename(path)),
+                          subtitle: Text(path),
+                          leading: const Icon(Icons.history),
+                          onTap: () => _openEditor(
+                            EditorLaunchAction.loadProjectPath(path),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openEditor(EditorLaunchAction action) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EditorScreen(launchAction: action),
+      ),
+    );
+    await _refreshRecents();
   }
 }

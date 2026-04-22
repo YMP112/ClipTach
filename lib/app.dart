@@ -28,7 +28,7 @@ class ClipTachApp extends ConsumerWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2A7A5C)),
         useMaterial3: true,
       ),
-      home: const EditorScreen(),
+      home: const HomeScreen(),
     );
   }
 }

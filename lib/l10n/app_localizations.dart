@@ -43,6 +43,10 @@ class AppLocalizations {
       'skew': 'Skew',
       'hintNoImage': 'Open an image to start.',
       'language': 'Language',
+      'homeIntro':
+          'Open an image, mark what to keep, and export a transparent PNG.',
+      'recentProjects': 'Recent Projects',
+      'noRecentProjects': 'No recent projects yet.',
     },
     'he': {
       'appTitle': 'ClipTach',
@@ -66,6 +70,10 @@ class AppLocalizations {
       'skew': 'הטיה',
       'hintNoImage': 'פתח תמונה כדי להתחיל.',
       'language': 'שפה',
+      'homeIntro':
+          'פתח תמונה, סמן מה לשמור, וחלץ אובייקט עם רקע שקוף במהירות.',
+      'recentProjects': 'פרויקטים אחרונים',
+      'noRecentProjects': 'אין פרויקטים אחרונים עדיין.',
     },
   };
 

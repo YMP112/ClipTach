@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/project_model.dart';
 import '../../../core/services/project_archive_service.dart';
+import '../../../core/services/recent_projects_service.dart';
 import '../domain/editor_state.dart';
 import '../infrastructure/auto_assist_service.dart';
 import '../infrastructure/file_io_service.dart';
@@ -17,6 +18,7 @@ final editorControllerProvider =
     autoAssistService: AutoAssistService(),
     fileIoService: FileIoService(),
     projectArchiveService: ProjectArchiveService(),
+    recentProjectsService: RecentProjectsService(),
   ),
 );
 
@@ -26,16 +28,19 @@ class EditorController extends StateNotifier<EditorState> {
     required AutoAssistService autoAssistService,
     required FileIoService fileIoService,
     required ProjectArchiveService projectArchiveService,
+    required RecentProjectsService recentProjectsService,
   })  : _imageProcessingService = imageProcessingService,
         _autoAssistService = autoAssistService,
         _fileIoService = fileIoService,
         _projectArchiveService = projectArchiveService,
+        _recentProjectsService = recentProjectsService,
         super(const EditorState());
 
   final ImageProcessingService _imageProcessingService;
   final AutoAssistService _autoAssistService;
   final FileIoService _fileIoService;
   final ProjectArchiveService _projectArchiveService;
+  final RecentProjectsService _recentProjectsService;
 
   Future<void> openImage() async {
     final opened = await _fileIoService.pickImage();
@@ -46,6 +51,18 @@ class EditorController extends StateNotifier<EditorState> {
     state = EditorState(
       sourceName: opened.fileName,
       sourceBytes: opened.bytes,
+      sourceImage: image,
+    );
+  }
+
+  Future<void> openImageBytes({
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final image = await _imageProcessingService.decodeImage(bytes);
+    state = EditorState(
+      sourceName: fileName,
+      sourceBytes: bytes,
       sourceImage: image,
     );
   }
@@ -217,6 +234,7 @@ class EditorController extends StateNotifier<EditorState> {
       sourceBytes: state.sourceBytes!,
     );
     await _fileIoService.writeBytes(path, bytes);
+    await _recentProjectsService.addRecentProject(path);
   }
 
   Future<void> loadProject() async {
@@ -224,6 +242,10 @@ class EditorController extends StateNotifier<EditorState> {
     if (path == null) {
       return;
     }
+    await loadProjectFromPath(path);
+  }
+
+  Future<void> loadProjectFromPath(String path) async {
     final bytes = await _fileIoService.readBytes(path);
     final loaded = _projectArchiveService.decode(bytes);
     final sourceImage = await _imageProcessingService.decodeImage(loaded.sourceBytes);
@@ -242,6 +264,7 @@ class EditorController extends StateNotifier<EditorState> {
     if (state.phase == EditorPhase.object) {
       await extractObject();
     }
+    await _recentProjectsService.addRecentProject(path);
   }
 
   Future<void> exportPng() async {
