@@ -8,9 +8,16 @@ import '../domain/editor_state.dart';
 
 class ImageProcessingService {
   Future<ui.Image> decodeImage(Uint8List bytes) async {
-    final completer = Completer<ui.Image>();
-    ui.decodeImageFromList(bytes, completer.complete);
-    return completer.future;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      codec.dispose();
+      return frame.image;
+    } catch (_) {
+      throw StateError(
+        'Failed to decode image. Please use PNG/JPG/WebP and verify the file is valid.',
+      );
+    }
   }
 
   Future<ui.Image> buildMaskImage({
