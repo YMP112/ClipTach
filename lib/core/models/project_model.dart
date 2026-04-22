@@ -8,6 +8,7 @@ class ProjectModel {
     required this.eraseStrokes,
     required this.brushSize,
     required this.markMode,
+    required this.maskTool,
     required this.showMask,
     required this.phase,
     required this.transform,
@@ -19,6 +20,7 @@ class ProjectModel {
   final List<BrushStroke> eraseStrokes;
   final double brushSize;
   final MarkMode markMode;
+  final MaskTool maskTool;
   final bool showMask;
   final EditorPhase phase;
   final ObjectTransform transform;
@@ -32,6 +34,7 @@ class ProjectModel {
           eraseStrokes.map((s) => s.toJson()).toList(growable: false),
       'brushSize': brushSize,
       'markMode': markMode.name,
+      'maskTool': maskTool.name,
       'showMask': showMask,
       'phase': phase.name,
       'transform': transform.toJson(),
@@ -56,6 +59,10 @@ class ProjectModel {
       markMode: MarkMode.values.firstWhere(
         (e) => e.name == json['markMode'],
         orElse: () => MarkMode.keep,
+      ),
+      maskTool: MaskTool.values.firstWhere(
+        (e) => e.name == json['maskTool'],
+        orElse: () => MaskTool.brush,
       ),
       showMask: json['showMask'] as bool? ?? true,
       phase: EditorPhase.values.firstWhere(

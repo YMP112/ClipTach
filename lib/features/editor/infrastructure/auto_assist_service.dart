@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -26,32 +27,63 @@ class AutoAssistService {
     final w = source.width;
     final h = source.height;
 
-    final borderLuma = _estimateBorderLuma(bytes, w, h);
-    final keepPoints = <Offset>[];
+    final borderMean = _estimateBorderMeanColor(bytes, w, h);
+    final borderStd = _estimateBorderDistanceStd(bytes, w, h, borderMean);
+    final threshold = math.max(26.0, borderStd * 2.2 + 10);
 
-    const step = 8;
-    const diffThreshold = 24.0;
-    for (var y = step; y < h - step; y += step) {
-      for (var x = step; x < w - step; x += step) {
-        if (_nearBorder(x, y, w, h, 0.08)) {
+    final keepPoints = <Offset>[];
+    int minX = w;
+    int minY = h;
+    int maxX = 0;
+    int maxY = 0;
+    var fgCount = 0;
+
+    for (var y = 2; y < h - 2; y += 2) {
+      for (var x = 2; x < w - 2; x += 2) {
+        if (_nearBorder(x, y, w, h, 0.04)) {
           continue;
         }
         final idx = (y * w + x) * 4;
-        final luma = _luma(bytes[idx], bytes[idx + 1], bytes[idx + 2]);
-        if ((luma - borderLuma).abs() >= diffThreshold) {
-          keepPoints.add(Offset(x.toDouble(), y.toDouble()));
+        final d = _colorDistance(
+          bytes[idx].toDouble(),
+          bytes[idx + 1].toDouble(),
+          bytes[idx + 2].toDouble(),
+          borderMean.$1,
+          borderMean.$2,
+          borderMean.$3,
+        );
+        if (d > threshold) {
+          fgCount++;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
         }
       }
     }
 
-    final erasePoints = _buildBorderPoints(w.toDouble(), h.toDouble());
-    if (keepPoints.isEmpty) {
+    if (fgCount < 150 || maxX <= minX || maxY <= minY) {
       return _fallback(w.toDouble(), h.toDouble());
     }
 
+    final padX = ((maxX - minX) * 0.06).round();
+    final padY = ((maxY - minY) * 0.06).round();
+    minX = (minX - padX).clamp(0, w - 1);
+    minY = (minY - padY).clamp(0, h - 1);
+    maxX = (maxX + padX).clamp(0, w - 1);
+    maxY = (maxY + padY).clamp(0, h - 1);
+
+    for (var y = minY; y <= maxY; y += 6) {
+      for (var x = minX; x <= maxX; x += 6) {
+        keepPoints.add(Offset(x.toDouble(), y.toDouble()));
+      }
+    }
+
+    final erasePoints = _buildBorderPoints(w.toDouble(), h.toDouble());
+
     return AutoAssistSuggestion(
       keepStrokes: <BrushStroke>[
-        BrushStroke(points: keepPoints, brushSize: 18),
+        BrushStroke(points: keepPoints, brushSize: 12),
       ],
       eraseStrokes: <BrushStroke>[
         BrushStroke(points: erasePoints, brushSize: 20),
@@ -88,8 +120,10 @@ class AutoAssistService {
     return erase;
   }
 
-  double _estimateBorderLuma(Uint8List bytes, int w, int h) {
-    double total = 0;
+  (double, double, double) _estimateBorderMeanColor(Uint8List bytes, int w, int h) {
+    double totalR = 0;
+    double totalG = 0;
+    double totalB = 0;
     var count = 0;
     const marginPercent = 0.1;
     final marginX = (w * marginPercent).floor();
@@ -103,14 +137,58 @@ class AutoAssistService {
           continue;
         }
         final idx = (y * w + x) * 4;
-        total += _luma(bytes[idx], bytes[idx + 1], bytes[idx + 2]);
+        totalR += bytes[idx];
+        totalG += bytes[idx + 1];
+        totalB += bytes[idx + 2];
         count++;
       }
     }
     if (count == 0) {
-      return 127;
+      return (127, 127, 127);
     }
-    return total / count;
+    return (totalR / count, totalG / count, totalB / count);
+  }
+
+  double _estimateBorderDistanceStd(
+    Uint8List bytes,
+    int w,
+    int h,
+    (double, double, double) mean,
+  ) {
+    final distances = <double>[];
+    const marginPercent = 0.1;
+    final marginX = (w * marginPercent).floor();
+    final marginY = (h * marginPercent).floor();
+
+    for (var y = 0; y < h; y += 4) {
+      for (var x = 0; x < w; x += 4) {
+        final isBorder =
+            x < marginX || x > w - marginX || y < marginY || y > h - marginY;
+        if (!isBorder) {
+          continue;
+        }
+        final idx = (y * w + x) * 4;
+        distances.add(
+          _colorDistance(
+            bytes[idx].toDouble(),
+            bytes[idx + 1].toDouble(),
+            bytes[idx + 2].toDouble(),
+            mean.$1,
+            mean.$2,
+            mean.$3,
+          ),
+        );
+      }
+    }
+    if (distances.isEmpty) {
+      return 8;
+    }
+    final avg = distances.reduce((a, b) => a + b) / distances.length;
+    final variance = distances
+            .map((d) => (d - avg) * (d - avg))
+            .reduce((a, b) => a + b) /
+        distances.length;
+    return math.sqrt(variance);
   }
 
   bool _nearBorder(int x, int y, int w, int h, double ratio) {
@@ -119,5 +197,17 @@ class AutoAssistService {
     return x < marginX || x > w - marginX || y < marginY || y > h - marginY;
   }
 
-  double _luma(int r, int g, int b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  double _colorDistance(
+    double r1,
+    double g1,
+    double b1,
+    double r2,
+    double g2,
+    double b2,
+  ) {
+    final dr = r1 - r2;
+    final dg = g1 - g2;
+    final db = b1 - b2;
+    return math.sqrt(dr * dr + dg * dg + db * db);
+  }
 }

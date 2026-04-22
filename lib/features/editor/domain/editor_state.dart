@@ -7,6 +7,8 @@ enum MarkMode { keep, erase }
 
 enum EditorPhase { mask, object }
 
+enum MaskTool { brush, polygonKeep }
+
 @immutable
 class BrushStroke {
   const BrushStroke({
@@ -105,6 +107,8 @@ class EditorSnapshot {
     required this.eraseStrokes,
     required this.brushSize,
     required this.markMode,
+    required this.maskTool,
+    required this.polygonDraft,
     required this.showMask,
     required this.phase,
     required this.transform,
@@ -114,6 +118,8 @@ class EditorSnapshot {
   final List<BrushStroke> eraseStrokes;
   final double brushSize;
   final MarkMode markMode;
+  final MaskTool maskTool;
+  final List<Offset> polygonDraft;
   final bool showMask;
   final EditorPhase phase;
   final ObjectTransform transform;
@@ -130,6 +136,8 @@ class EditorState {
     this.eraseStrokes = const <BrushStroke>[],
     this.brushSize = 18,
     this.markMode = MarkMode.keep,
+    this.maskTool = MaskTool.brush,
+    this.polygonDraft = const <Offset>[],
     this.showMask = true,
     this.phase = EditorPhase.mask,
     this.transform = const ObjectTransform(),
@@ -145,6 +153,8 @@ class EditorState {
   final List<BrushStroke> eraseStrokes;
   final double brushSize;
   final MarkMode markMode;
+  final MaskTool maskTool;
+  final List<Offset> polygonDraft;
   final bool showMask;
   final EditorPhase phase;
   final ObjectTransform transform;
@@ -162,6 +172,8 @@ class EditorState {
     List<BrushStroke>? eraseStrokes,
     double? brushSize,
     MarkMode? markMode,
+    MaskTool? maskTool,
+    List<Offset>? polygonDraft,
     bool? showMask,
     EditorPhase? phase,
     ObjectTransform? transform,
@@ -179,6 +191,8 @@ class EditorState {
       eraseStrokes: eraseStrokes ?? this.eraseStrokes,
       brushSize: brushSize ?? this.brushSize,
       markMode: markMode ?? this.markMode,
+      maskTool: maskTool ?? this.maskTool,
+      polygonDraft: polygonDraft ?? this.polygonDraft,
       showMask: showMask ?? this.showMask,
       phase: phase ?? this.phase,
       transform: transform ?? this.transform,

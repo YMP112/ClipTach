@@ -12,6 +12,7 @@ class CanvasView extends StatefulWidget {
     required this.onStrokeStart,
     required this.onStrokeUpdate,
     required this.onObjectMove,
+    required this.onPolygonPointTap,
     required this.emptyHint,
   });
 
@@ -19,6 +20,7 @@ class CanvasView extends StatefulWidget {
   final ValueChanged<Offset> onStrokeStart;
   final ValueChanged<Offset> onStrokeUpdate;
   final ValueChanged<Offset> onObjectMove;
+  final ValueChanged<Offset> onPolygonPointTap;
   final String emptyHint;
 
   @override
@@ -80,7 +82,8 @@ class _CanvasViewState extends State<CanvasView> {
               _activePointers > 1) {
             return;
           }
-          if (widget.state.phase == EditorPhase.mask) {
+          if (widget.state.phase == EditorPhase.mask &&
+              widget.state.maskTool == MaskTool.brush) {
             widget.onStrokeStart(_toImageSpace(details.localFocalPoint));
           }
         },
@@ -101,13 +104,22 @@ class _CanvasViewState extends State<CanvasView> {
             return;
           }
 
-          if (widget.state.phase == EditorPhase.mask) {
+          if (widget.state.phase == EditorPhase.mask &&
+              widget.state.maskTool == MaskTool.brush) {
             widget.onStrokeUpdate(_toImageSpace(details.localFocalPoint));
             return;
           }
           if (details.focalPointDelta != Offset.zero) {
             widget.onObjectMove(details.focalPointDelta / _zoom);
           }
+        },
+        onTapDown: (details) {
+          if (widget.state.sourceImage == null ||
+              widget.state.phase != EditorPhase.mask ||
+              widget.state.maskTool != MaskTool.polygonKeep) {
+            return;
+          }
+          widget.onPolygonPointTap(_toImageSpace(details.localPosition));
         },
         child: CustomPaint(
           painter: _CanvasPainter(
@@ -179,6 +191,9 @@ class _CanvasPainter extends CustomPainter {
       if (state.showMask) {
         _drawStrokeList(canvas, state.keepStrokes, const Color(0x9900D878));
         _drawStrokeList(canvas, state.eraseStrokes, const Color(0x99FF3B30));
+        if (state.polygonDraft.isNotEmpty) {
+          _drawPolygonDraft(canvas, state.polygonDraft);
+        }
       }
     } else {
       final extracted = state.extractedImage;
@@ -205,6 +220,42 @@ class _CanvasPainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  void _drawPolygonDraft(Canvas canvas, List<Offset> points) {
+    final border = Paint()
+      ..color = const Color(0xFF007AFF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..isAntiAlias = true;
+    final fill = Paint()
+      ..color = const Color(0x33007AFF)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final vertexPaint = Paint()
+      ..color = const Color(0xFF007AFF)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    if (points.length >= 3) {
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (var i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+      path.close();
+      canvas.drawPath(path, fill);
+      canvas.drawPath(path, border);
+    } else if (points.length >= 2) {
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (var i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+      canvas.drawPath(path, border);
+    }
+
+    for (final p in points) {
+      canvas.drawCircle(p, 3.5, vertexPaint);
+    }
   }
 
   void _drawStrokeList(Canvas canvas, List<BrushStroke> list, Color color) {

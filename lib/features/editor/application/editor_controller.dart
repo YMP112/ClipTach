@@ -71,6 +71,46 @@ class EditorController extends StateNotifier<EditorState> {
     state = state.copyWith(markMode: mode);
   }
 
+  void setMaskTool(MaskTool tool) {
+    state = state.copyWith(maskTool: tool);
+  }
+
+  void addPolygonPoint(Offset point) {
+    if (!state.hasImage || state.phase != EditorPhase.mask) {
+      return;
+    }
+    state = state.copyWith(
+      polygonDraft: <Offset>[...state.polygonDraft, point],
+      clearExtractedImage: true,
+    );
+  }
+
+  void clearPolygonDraft() {
+    state = state.copyWith(polygonDraft: const <Offset>[]);
+  }
+
+  void applyPolygonKeep() {
+    if (!state.hasImage || state.phase != EditorPhase.mask) {
+      return;
+    }
+    if (state.polygonDraft.length < 3) {
+      return;
+    }
+
+    _pushUndo();
+    final polygonStroke = BrushStroke(
+      points: _rasterizePolygon(state.polygonDraft),
+      brushSize: 4,
+    );
+
+    state = state.copyWith(
+      keepStrokes: <BrushStroke>[...state.keepStrokes, polygonStroke],
+      polygonDraft: const <Offset>[],
+      redoStack: const <EditorSnapshot>[],
+      clearExtractedImage: true,
+    );
+  }
+
   void setBrushSize(double size) {
     state = state.copyWith(brushSize: size);
   }
@@ -81,6 +121,9 @@ class EditorController extends StateNotifier<EditorState> {
 
   void startStroke(Offset point) {
     if (!state.hasImage || state.phase != EditorPhase.mask) {
+      return;
+    }
+    if (state.maskTool != MaskTool.brush) {
       return;
     }
     _pushUndo();
@@ -102,6 +145,9 @@ class EditorController extends StateNotifier<EditorState> {
 
   void appendStrokePoint(Offset point) {
     if (!state.hasImage || state.phase != EditorPhase.mask) {
+      return;
+    }
+    if (state.maskTool != MaskTool.brush) {
       return;
     }
     if (state.markMode == MarkMode.keep) {
@@ -150,6 +196,7 @@ class EditorController extends StateNotifier<EditorState> {
     state = state.copyWith(
       extractedImage: extracted,
       phase: EditorPhase.object,
+      polygonDraft: const <Offset>[],
       showMask: false,
     );
   }
@@ -225,6 +272,7 @@ class EditorController extends StateNotifier<EditorState> {
       eraseStrokes: state.eraseStrokes,
       brushSize: state.brushSize,
       markMode: state.markMode,
+      maskTool: state.maskTool,
       showMask: state.showMask,
       phase: state.phase,
       transform: state.transform,
@@ -257,6 +305,7 @@ class EditorController extends StateNotifier<EditorState> {
       eraseStrokes: loaded.model.eraseStrokes,
       brushSize: loaded.model.brushSize,
       markMode: loaded.model.markMode,
+      maskTool: loaded.model.maskTool,
       showMask: loaded.model.showMask,
       phase: loaded.model.phase,
       transform: loaded.model.transform,
@@ -326,6 +375,8 @@ class EditorController extends StateNotifier<EditorState> {
       eraseStrokes: s.eraseStrokes,
       brushSize: s.brushSize,
       markMode: s.markMode,
+      maskTool: s.maskTool,
+      polygonDraft: s.polygonDraft,
       showMask: s.showMask,
       phase: s.phase,
       transform: s.transform,
@@ -342,6 +393,8 @@ class EditorController extends StateNotifier<EditorState> {
       eraseStrokes: snapshot.eraseStrokes,
       brushSize: snapshot.brushSize,
       markMode: snapshot.markMode,
+      maskTool: snapshot.maskTool,
+      polygonDraft: snapshot.polygonDraft,
       showMask: snapshot.showMask,
       phase: snapshot.phase,
       transform: snapshot.transform,
@@ -360,5 +413,49 @@ class EditorController extends StateNotifier<EditorState> {
       extractedImage: extracted,
       transform: state.transform,
     );
+  }
+
+  List<Offset> _rasterizePolygon(List<Offset> polygon) {
+    if (polygon.length < 3) {
+      return const <Offset>[];
+    }
+
+    double minX = polygon.first.dx;
+    double maxX = polygon.first.dx;
+    double minY = polygon.first.dy;
+    double maxY = polygon.first.dy;
+
+    for (final p in polygon) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+
+    final points = <Offset>[];
+    for (double y = minY.floorToDouble(); y <= maxY.ceilToDouble(); y += 2) {
+      for (double x = minX.floorToDouble(); x <= maxX.ceilToDouble(); x += 2) {
+        if (_pointInPolygon(Offset(x, y), polygon)) {
+          points.add(Offset(x, y));
+        }
+      }
+    }
+    return points;
+  }
+
+  bool _pointInPolygon(Offset p, List<Offset> polygon) {
+    var inside = false;
+    for (int i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      final pi = polygon[i];
+      final pj = polygon[j];
+      final intersects = ((pi.dy > p.dy) != (pj.dy > p.dy)) &&
+          (p.dx <
+              (pj.dx - pi.dx) * (p.dy - pi.dy) / ((pj.dy - pi.dy) + 0.000001) +
+                  pi.dx);
+      if (intersects) {
+        inside = !inside;
+      }
+    }
+    return inside;
   }
 }

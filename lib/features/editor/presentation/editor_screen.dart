@@ -140,6 +140,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                   onStrokeStart: controller.startStroke,
                   onStrokeUpdate: controller.appendStrokePoint,
                   onObjectMove: controller.moveObjectBy,
+                  onPolygonPointTap: controller.addPolygonPoint,
                 ),
               ),
             ),
@@ -188,8 +189,10 @@ class _MaskControls extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Column(
         children: [
-          Row(
-            children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
               SegmentedButton<MarkMode>(
                 segments: [
                   ButtonSegment(
@@ -205,6 +208,23 @@ class _MaskControls extends StatelessWidget {
                 ],
                 selected: {state.markMode},
                 onSelectionChanged: (value) => controller.setMarkMode(value.first),
+              ),
+              const SizedBox(width: 12),
+              SegmentedButton<MaskTool>(
+                segments: [
+                  ButtonSegment(
+                    value: MaskTool.brush,
+                    label: Text(loc.t('brushTool')),
+                    icon: const Icon(Icons.brush_outlined),
+                  ),
+                  ButtonSegment(
+                    value: MaskTool.polygonKeep,
+                    label: Text(loc.t('polygonKeepTool')),
+                    icon: const Icon(Icons.polyline_outlined),
+                  ),
+                ],
+                selected: {state.maskTool},
+                onSelectionChanged: (value) => controller.setMaskTool(value.first),
               ),
               const SizedBox(width: 12),
               Checkbox(
@@ -237,10 +257,28 @@ class _MaskControls extends StatelessWidget {
                 icon: const Icon(Icons.cut),
                 label: Text(loc.t('extractObject')),
               ),
-            ],
+              ],
+            ),
           ),
           Row(
             children: [
+              if (state.maskTool == MaskTool.polygonKeep) ...[
+                OutlinedButton.icon(
+                  onPressed: state.polygonDraft.isNotEmpty
+                      ? controller.clearPolygonDraft
+                      : null,
+                  icon: const Icon(Icons.clear),
+                  label: Text(loc.t('clearPolygon')),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed:
+                      state.polygonDraft.length >= 3 ? controller.applyPolygonKeep : null,
+                  icon: const Icon(Icons.check),
+                  label: Text(loc.t('applyPolygon')),
+                ),
+                const SizedBox(width: 12),
+              ],
               Text('${loc.t('brushSize')}: ${state.brushSize.toStringAsFixed(0)}'),
               Expanded(
                 child: Slider(
