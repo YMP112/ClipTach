@@ -70,10 +70,18 @@ class ImageProcessingService {
 
     final output = Uint8List(source.width * source.height * 4);
     for (var i = 0; i < output.length; i += 4) {
-      output[i] = sourceRaw.getUint8(i);
-      output[i + 1] = sourceRaw.getUint8(i + 1);
-      output[i + 2] = sourceRaw.getUint8(i + 2);
-      output[i + 3] = maskRaw.getUint8(i);
+      final alpha = maskRaw.getUint8(i);
+      if (alpha <= 8) {
+        output[i] = 0;
+        output[i + 1] = 0;
+        output[i + 2] = 0;
+        output[i + 3] = 0;
+      } else {
+        output[i] = sourceRaw.getUint8(i);
+        output[i + 1] = sourceRaw.getUint8(i + 1);
+        output[i + 2] = sourceRaw.getUint8(i + 2);
+        output[i + 3] = alpha;
+      }
     }
 
     final completer = Completer<ui.Image>();

@@ -232,7 +232,7 @@ class _MaskControls extends StatelessWidget {
                 onChanged: (value) => controller.setShowMask(value ?? false),
               ),
               Text(loc.t('showMask')),
-              const Spacer(),
+              const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: state.hasImage
                     ? () async {
