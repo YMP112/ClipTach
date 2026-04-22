@@ -32,6 +32,7 @@ class _CanvasViewState extends State<CanvasView> {
   Offset? _lastPanPointer;
   Offset? _lastScaleFocal;
   double _lastScale = 1;
+  int _activePointers = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +46,7 @@ class _CanvasViewState extends State<CanvasView> {
         }
       },
       onPointerDown: (event) {
+        _activePointers++;
         if (event.buttons == kSecondaryMouseButton) {
           _isRightMousePanning = true;
           _lastPanPointer = event.localPosition;
@@ -59,6 +61,12 @@ class _CanvasViewState extends State<CanvasView> {
         }
       },
       onPointerUp: (_) {
+        _activePointers = (_activePointers - 1).clamp(0, 9999);
+        _isRightMousePanning = false;
+        _lastPanPointer = null;
+      },
+      onPointerCancel: (_) {
+        _activePointers = (_activePointers - 1).clamp(0, 9999);
         _isRightMousePanning = false;
         _lastPanPointer = null;
       },
@@ -67,37 +75,39 @@ class _CanvasViewState extends State<CanvasView> {
         onScaleStart: (details) {
           _lastScaleFocal = details.localFocalPoint;
           _lastScale = _zoom;
+          if (widget.state.sourceImage == null ||
+              _isRightMousePanning ||
+              _activePointers > 1) {
+            return;
+          }
+          if (widget.state.phase == EditorPhase.mask) {
+            widget.onStrokeStart(_toImageSpace(details.localFocalPoint));
+          }
         },
         onScaleUpdate: (details) {
-          if (details.pointerCount < 2) {
-            return;
-          }
-          setState(() {
-            _zoom = (_lastScale * details.scale).clamp(0.2, 8);
-            if (_lastScaleFocal != null) {
-              _pan += details.localFocalPoint - _lastScaleFocal!;
-              _lastScaleFocal = details.localFocalPoint;
-            }
-          });
-        },
-        onPanStart: (details) {
           if (widget.state.sourceImage == null || _isRightMousePanning) {
             return;
           }
+
+          final isMultiTouch = _activePointers > 1 || details.scale != 1.0;
+          if (isMultiTouch) {
+            setState(() {
+              _zoom = (_lastScale * details.scale).clamp(0.2, 8);
+              if (_lastScaleFocal != null) {
+                _pan += details.localFocalPoint - _lastScaleFocal!;
+                _lastScaleFocal = details.localFocalPoint;
+              }
+            });
+            return;
+          }
+
           if (widget.state.phase == EditorPhase.mask) {
-            widget.onStrokeStart(_toImageSpace(details.localPosition));
+            widget.onStrokeUpdate(_toImageSpace(details.localFocalPoint));
             return;
           }
-        },
-        onPanUpdate: (details) {
-          if (widget.state.sourceImage == null || _isRightMousePanning) {
-            return;
+          if (details.focalPointDelta != Offset.zero) {
+            widget.onObjectMove(details.focalPointDelta / _zoom);
           }
-          if (widget.state.phase == EditorPhase.mask) {
-            widget.onStrokeUpdate(_toImageSpace(details.localPosition));
-            return;
-          }
-          widget.onObjectMove(details.delta / _zoom);
         },
         child: CustomPaint(
           painter: _CanvasPainter(

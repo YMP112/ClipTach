@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -17,19 +18,33 @@ class OpenedImage {
 
 class FileIoService {
   Future<OpenedImage?> pickImage() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
+    final result = await FilePicker.platform
+        .pickFiles(
+          type: FileType.image,
+          withData: false,
+        )
+        .timeout(
+          const Duration(minutes: 2),
+          onTimeout: () =>
+              throw TimeoutException('Image picker timed out. Please retry.'),
+        );
     if (result == null || result.files.isEmpty) {
       return null;
     }
+
     final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null) {
-      return null;
+    final path = file.path;
+    if (path != null && path.isNotEmpty) {
+      final bytes = await File(path).readAsBytes();
+      return OpenedImage(fileName: file.name, bytes: bytes);
     }
-    return OpenedImage(fileName: file.name, bytes: bytes);
+
+    final bytes = file.bytes;
+    if (bytes != null) {
+      return OpenedImage(fileName: file.name, bytes: bytes);
+    }
+
+    throw StateError('Unable to read selected image file bytes.');
   }
 
   Future<String?> pickProjectSavePath() {
