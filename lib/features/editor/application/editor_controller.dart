@@ -410,6 +410,11 @@ class EditorController extends StateNotifier<EditorState> {
     await _fileIoService.writeBytes(path, png);
   }
 
+  String exportPathForDirectory(String directory) {
+    return p.join(
+        directory, _fileIoService.pngFileName(suggestedExportFileName()));
+  }
+
   int _nearestPolygonInsertIndex(List<Offset> polygon, Offset point) {
     var bestIndex = polygon.length;
     var bestDistanceSq = double.infinity;
@@ -455,9 +460,10 @@ class EditorController extends StateNotifier<EditorState> {
     return _exportPreferencesService.save(options);
   }
 
-  Future<String?> pickExportPath() {
-    return _fileIoService.pickPngSavePath(
-        defaultFileName: suggestedExportFileName());
+  Future<String?> pickExportDirectory({String? initialDirectory}) {
+    return _fileIoService.pickExportDirectory(
+      initialDirectory: initialDirectory,
+    );
   }
 
   @visibleForTesting

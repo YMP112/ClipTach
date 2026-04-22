@@ -8,7 +8,9 @@ import 'package:cliptach/features/editor/application/editor_controller.dart';
 import 'package:cliptach/features/editor/infrastructure/auto_assist_service.dart';
 import 'package:cliptach/features/editor/infrastructure/file_io_service.dart';
 import 'package:cliptach/features/editor/infrastructure/image_processing_service.dart';
+import 'package:cliptach/core/models/export_options.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('closed polygon insert index follows the nearest edge', () {
@@ -57,6 +59,23 @@ void main() {
     final file = File(path);
     expect(await file.exists(), isTrue);
     expect(await file.length(), 3);
+  });
+
+  test('export preferences remember the last export directory', () async {
+    SharedPreferences.setMockInitialValues({});
+    const options = ExportOptions(
+      mode: ExportMode.objectOnly,
+      marginPx: 0,
+      exportDirectory: r'C:\Exports',
+    );
+
+    final service = ExportPreferencesService();
+    await service.save(options);
+    final loaded = await service.load();
+
+    expect(loaded.mode, ExportMode.objectOnly);
+    expect(loaded.marginPx, 0);
+    expect(loaded.exportDirectory, r'C:\Exports');
   });
 }
 

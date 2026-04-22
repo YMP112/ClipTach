@@ -55,17 +55,11 @@ class FileIoService {
     );
   }
 
-  Future<String?> pickPngSavePath({String? defaultFileName}) async {
-    final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'Export PNG',
-      fileName: _pngFileName(defaultFileName ?? 'result_clear.png'),
-      type: FileType.custom,
-      allowedExtensions: const ['png'],
+  Future<String?> pickExportDirectory({String? initialDirectory}) {
+    return FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose Export Folder',
+      initialDirectory: initialDirectory,
     );
-    if (path == null || path.isEmpty) {
-      return path;
-    }
-    return _pngFileName(path);
   }
 
   Future<String?> pickProjectOpenPath() async {
@@ -114,7 +108,7 @@ class FileIoService {
     }
   }
 
-  String _pngFileName(String fileName) {
+  String pngFileName(String fileName) {
     if (p.extension(fileName).toLowerCase() == '.png') {
       return fileName;
     }

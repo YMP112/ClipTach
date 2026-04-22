@@ -110,14 +110,17 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               onOpenImage: () => _guardAsync(context, controller.openImage),
               onLoadProject: () => _guardAsync(context, controller.loadProject),
               onSaveProject: () => _guardAsync(context, controller.saveProject),
-              onExportPng: () => _guardAsync(context, () => _exportFlow(controller)),
+              onExportPng: () =>
+                  _guardAsync(context, () => _exportFlow(controller)),
               onUndo: controller.undo,
               onRedo: controller.redo,
               onReset: controller.resetAll,
               onToggleLanguage: () {
                 final current = ref.read(localeProvider);
                 ref.read(localeProvider.notifier).state =
-                    current.languageCode == 'he' ? const Locale('en') : const Locale('he');
+                    current.languageCode == 'he'
+                        ? const Locale('en')
+                        : const Locale('he');
               },
               openImageLabel: loc.t('openImage'),
               loadProjectLabel: loc.t('loadProject'),
@@ -162,7 +165,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                             });
                           },
                           icon: Icon(
-                            _handMode ? Icons.pan_tool_alt : Icons.pan_tool_outlined,
+                            _handMode
+                                ? Icons.pan_tool_alt
+                                : Icons.pan_tool_outlined,
                           ),
                         ),
                       ),
@@ -188,7 +193,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                                     });
                                   },
                                   icon: Icon(
-                                    _handMode ? Icons.pan_tool_alt : Icons.pan_tool_outlined,
+                                    _handMode
+                                        ? Icons.pan_tool_alt
+                                        : Icons.pan_tool_outlined,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -269,7 +276,8 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       context: context,
       builder: (_) => _ExportDialog(
         initial: initial,
-        onPickPath: controller.pickExportPath,
+        suggestedFileName: controller.suggestedExportFileName(),
+        onPickDirectory: controller.pickExportDirectory,
         labels: _ExportDialogLabels(
           title: 'ייצוא PNG',
           location: 'מיקום ייצוא',
@@ -291,9 +299,10 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       return;
     }
 
+    final exportPath = controller.exportPathForDirectory(result.directory);
     await controller.saveExportOptions(result.options);
     await controller.exportPng(
-      path: result.path,
+      path: exportPath,
       options: result.options,
     );
     if (!mounted) {
@@ -326,70 +335,72 @@ class _MaskControls extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-              SegmentedButton<MarkMode>(
-                segments: [
-                  ButtonSegment(
-                    value: MarkMode.keep,
-                    label: Text(loc.t('keep')),
-                    icon: const Icon(Icons.brush),
-                  ),
-                  ButtonSegment(
-                    value: MarkMode.erase,
-                    label: Text(loc.t('erase')),
-                    icon: const Icon(Icons.auto_fix_off),
-                  ),
-                ],
-                selected: {state.markMode},
-                onSelectionChanged: (value) => controller.setMarkMode(value.first),
-              ),
-              const SizedBox(width: 12),
-              SegmentedButton<MaskTool>(
-                segments: [
-                  ButtonSegment(
-                    value: MaskTool.brush,
-                    label: Text(loc.t('brushTool')),
-                    icon: const Icon(Icons.brush_outlined),
-                  ),
-                  ButtonSegment(
-                    value: MaskTool.polygonKeep,
-                    label: Text(loc.t('polygonKeepTool')),
-                    icon: const Icon(Icons.polyline_outlined),
-                  ),
-                ],
-                selected: {state.maskTool},
-                onSelectionChanged: (value) => controller.setMaskTool(value.first),
-              ),
-              const SizedBox(width: 12),
-              Checkbox(
-                value: state.showMask,
-                onChanged: (value) => controller.setShowMask(value ?? false),
-              ),
-              Text(loc.t('showMask')),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: state.hasImage
-                    ? () async {
-                        try {
-                          await controller.autoAssist();
-                        } catch (e) {
-                          if (!context.mounted) {
-                            return;
+                SegmentedButton<MarkMode>(
+                  segments: [
+                    ButtonSegment(
+                      value: MarkMode.keep,
+                      label: Text(loc.t('keep')),
+                      icon: const Icon(Icons.brush),
+                    ),
+                    ButtonSegment(
+                      value: MarkMode.erase,
+                      label: Text(loc.t('erase')),
+                      icon: const Icon(Icons.auto_fix_off),
+                    ),
+                  ],
+                  selected: {state.markMode},
+                  onSelectionChanged: (value) =>
+                      controller.setMarkMode(value.first),
+                ),
+                const SizedBox(width: 12),
+                SegmentedButton<MaskTool>(
+                  segments: [
+                    ButtonSegment(
+                      value: MaskTool.brush,
+                      label: Text(loc.t('brushTool')),
+                      icon: const Icon(Icons.brush_outlined),
+                    ),
+                    ButtonSegment(
+                      value: MaskTool.polygonKeep,
+                      label: Text(loc.t('polygonKeepTool')),
+                      icon: const Icon(Icons.polyline_outlined),
+                    ),
+                  ],
+                  selected: {state.maskTool},
+                  onSelectionChanged: (value) =>
+                      controller.setMaskTool(value.first),
+                ),
+                const SizedBox(width: 12),
+                Checkbox(
+                  value: state.showMask,
+                  onChanged: (value) => controller.setShowMask(value ?? false),
+                ),
+                Text(loc.t('showMask')),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: state.hasImage
+                      ? () async {
+                          try {
+                            await controller.autoAssist();
+                          } catch (e) {
+                            if (!context.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(e.toString())),
+                            );
                           }
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString())),
-                          );
                         }
-                      }
-                    : null,
-                icon: const Icon(Icons.auto_fix_high),
-                label: Text(loc.t('autoAssist')),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: state.hasImage ? controller.extractObject : null,
-                icon: const Icon(Icons.cut),
-                label: Text(loc.t('extractObject')),
-              ),
+                      : null,
+                  icon: const Icon(Icons.auto_fix_high),
+                  label: Text(loc.t('autoAssist')),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: state.hasImage ? controller.extractObject : null,
+                  icon: const Icon(Icons.cut),
+                  label: Text(loc.t('extractObject')),
+                ),
               ],
             ),
           ),
@@ -413,14 +424,16 @@ class _MaskControls extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 FilledButton.tonalIcon(
-                  onPressed:
-                      state.polygonDraft.length >= 3 ? controller.applyPolygonKeep : null,
+                  onPressed: state.polygonDraft.length >= 3
+                      ? controller.applyPolygonKeep
+                      : null,
                   icon: const Icon(Icons.check),
                   label: Text(loc.t('applyPolygon')),
                 ),
                 const SizedBox(width: 12),
               ],
-              Text('${loc.t('brushSize')}: ${state.brushSize.toStringAsFixed(0)}'),
+              Text(
+                  '${loc.t('brushSize')}: ${state.brushSize.toStringAsFixed(0)}'),
               Expanded(
                 child: Slider(
                   value: state.brushSize,
@@ -545,23 +558,29 @@ class _NumberValueRow extends StatelessWidget {
 
 class _ExportDialogResult {
   _ExportDialogResult({
-    required this.path,
+    required this.directory,
+    required this.fileName,
     required this.options,
   });
 
-  final String path;
+  final String directory;
+  final String fileName;
   final ExportOptions options;
+
+  String get path => p.join(directory, fileName);
 }
 
 class _ExportDialog extends StatefulWidget {
   const _ExportDialog({
     required this.initial,
-    required this.onPickPath,
+    required this.suggestedFileName,
+    required this.onPickDirectory,
     required this.labels,
   });
 
   final ExportOptions initial;
-  final Future<String?> Function() onPickPath;
+  final String suggestedFileName;
+  final Future<String?> Function({String? initialDirectory}) onPickDirectory;
   final _ExportDialogLabels labels;
 
   @override
@@ -571,13 +590,14 @@ class _ExportDialog extends StatefulWidget {
 class _ExportDialogState extends State<_ExportDialog> {
   late ExportMode _mode;
   late TextEditingController _marginController;
-  String? _path;
+  String? _directory;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _mode = widget.initial.mode;
+    _directory = widget.initial.exportDirectory;
     _marginController = TextEditingController(
       text: widget.initial.marginPx.toString(),
     );
@@ -605,7 +625,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               children: [
                 Expanded(
                   child: Text(
-                    _path ?? widget.labels.noPath,
+                    _directory ?? widget.labels.noPath,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -613,18 +633,22 @@ class _ExportDialogState extends State<_ExportDialog> {
                 const SizedBox(width: 8),
                 OutlinedButton(
                   onPressed: () async {
-                    final path = await widget.onPickPath();
-                    if (!mounted || path == null) {
+                    final directory = await widget.onPickDirectory(
+                      initialDirectory: _directory,
+                    );
+                    if (!mounted || directory == null) {
                       return;
                     }
                     setState(() {
-                      _path = path;
+                      _directory = directory;
                     });
                   },
                   child: Text(widget.labels.choose),
                 ),
               ],
             ),
+            const SizedBox(height: 6),
+            Text('File name: ${widget.suggestedFileName}'),
             const SizedBox(height: 12),
             Text(widget.labels.mode),
             const SizedBox(height: 6),
@@ -695,13 +719,15 @@ class _ExportDialogState extends State<_ExportDialog> {
   }
 
   Future<void> _onExport() async {
-    if (_path == null || _path!.isEmpty) {
-      final picked = await widget.onPickPath();
+    if (_directory == null || _directory!.isEmpty) {
+      final picked = await widget.onPickDirectory(
+        initialDirectory: widget.initial.exportDirectory,
+      );
       if (!mounted || picked == null || picked.isEmpty) {
         setState(() => _error = widget.labels.choosePathError);
         return;
       }
-      _path = picked;
+      _directory = picked;
     }
 
     final margin = _mode == ExportMode.withMargins
@@ -714,10 +740,12 @@ class _ExportDialogState extends State<_ExportDialog> {
 
     Navigator.of(context).pop(
       _ExportDialogResult(
-        path: _path!,
+        directory: _directory!,
+        fileName: widget.suggestedFileName,
         options: ExportOptions(
           mode: _mode,
           marginPx: margin ?? 0,
+          exportDirectory: _directory,
         ),
       ),
     );
@@ -802,12 +830,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               spacing: 8,
               children: [
                 FilledButton.icon(
-                  onPressed: () => _openEditor(const EditorLaunchAction.openImage()),
+                  onPressed: () =>
+                      _openEditor(const EditorLaunchAction.openImage()),
                   icon: const Icon(Icons.image_outlined),
                   label: Text(loc.t('openImage')),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => _openEditor(const EditorLaunchAction.loadProject()),
+                  onPressed: () =>
+                      _openEditor(const EditorLaunchAction.loadProject()),
                   icon: const Icon(Icons.folder_open),
                   label: Text(loc.t('loadProject')),
                 ),
