@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/services/project_archive_service.dart';
 
@@ -54,11 +55,17 @@ class FileIoService {
     );
   }
 
-  Future<String?> pickPngSavePath({String? defaultFileName}) {
-    return FilePicker.platform.saveFile(
-      dialogTitle: 'ייצוא PNG',
-      fileName: defaultFileName ?? 'result_clear.png',
+  Future<String?> pickPngSavePath({String? defaultFileName}) async {
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export PNG',
+      fileName: _pngFileName(defaultFileName ?? 'result_clear.png'),
+      type: FileType.custom,
+      allowedExtensions: const ['png'],
     );
+    if (path == null || path.isEmpty) {
+      return path;
+    }
+    return _pngFileName(path);
   }
 
   Future<String?> pickProjectOpenPath() async {
@@ -81,7 +88,16 @@ class FileIoService {
   }
 
   Future<void> _writeBytesChecked(String path, Uint8List bytes) async {
-    final file = File(path);
+    final trimmedPath = path.trim();
+    if (trimmedPath.isEmpty) {
+      throw const FileSystemException('Export failed: empty file path');
+    }
+    if (bytes.isEmpty) {
+      throw FileSystemException(
+          'Export failed: no bytes to write', trimmedPath);
+    }
+
+    final file = File(trimmedPath);
     final dir = file.parent;
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -89,11 +105,19 @@ class FileIoService {
     await file.writeAsBytes(bytes, flush: true);
     final exists = await file.exists();
     if (!exists) {
-      throw FileSystemException('Export failed: file was not created', path);
+      throw FileSystemException(
+          'Export failed: file was not created', trimmedPath);
     }
     final length = await file.length();
     if (length == 0) {
-      throw FileSystemException('Export failed: file is empty', path);
+      throw FileSystemException('Export failed: file is empty', trimmedPath);
     }
+  }
+
+  String _pngFileName(String fileName) {
+    if (p.extension(fileName).toLowerCase() == '.png') {
+      return fileName;
+    }
+    return '$fileName.png';
   }
 }

@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -91,8 +91,14 @@ class EditorController extends StateNotifier<EditorState> {
     if (!state.hasImage || state.phase != EditorPhase.mask) {
       return;
     }
+    final next = <Offset>[...state.polygonDraft];
+    if (next.length >= 3) {
+      next.insert(_nearestPolygonInsertIndex(next, point), point);
+    } else {
+      next.add(point);
+    }
     state = state.copyWith(
-      polygonDraft: <Offset>[...state.polygonDraft, point],
+      polygonDraft: next,
       clearExtractedImage: true,
     );
   }
@@ -114,7 +120,8 @@ class EditorController extends StateNotifier<EditorState> {
       return;
     }
     state = state.copyWith(
-      polygonDraft: state.polygonDraft.sublist(0, state.polygonDraft.length - 1),
+      polygonDraft:
+          state.polygonDraft.sublist(0, state.polygonDraft.length - 1),
       clearExtractedImage: true,
     );
   }
@@ -161,7 +168,8 @@ class EditorController extends StateNotifier<EditorState> {
       return;
     }
     _pushUndo();
-    final stroke = BrushStroke(points: <Offset>[point], brushSize: state.brushSize);
+    final stroke =
+        BrushStroke(points: <Offset>[point], brushSize: state.brushSize);
     if (state.markMode == MarkMode.keep) {
       state = state.copyWith(
         keepStrokes: <BrushStroke>[...state.keepStrokes, stroke],
@@ -359,7 +367,8 @@ class EditorController extends StateNotifier<EditorState> {
   Future<void> loadProjectFromPath(String path) async {
     final bytes = await _fileIoService.readBytes(path);
     final loaded = _projectArchiveService.decode(bytes);
-    final sourceImage = await _imageProcessingService.decodeImage(loaded.sourceBytes);
+    final sourceImage =
+        await _imageProcessingService.decodeImage(loaded.sourceBytes);
     state = EditorState(
       sourceName: loaded.model.sourceName,
       sourceBytes: loaded.sourceBytes,
@@ -387,7 +396,8 @@ class EditorController extends StateNotifier<EditorState> {
   }) async {
     final extracted = state.extractedImage;
     if (extracted == null) {
-      return;
+      throw StateError(
+          'Nothing to export. Extract the object before exporting.');
     }
     final png = await _imageProcessingService.exportPng(
       extractedImage: extracted,
@@ -400,6 +410,43 @@ class EditorController extends StateNotifier<EditorState> {
     await _fileIoService.writeBytes(path, png);
   }
 
+  int _nearestPolygonInsertIndex(List<Offset> polygon, Offset point) {
+    var bestIndex = polygon.length;
+    var bestDistanceSq = double.infinity;
+
+    for (var i = 0; i < polygon.length; i++) {
+      final start = polygon[i];
+      final end = polygon[(i + 1) % polygon.length];
+      final distanceSq = _distanceToSegmentSquared(point, start, end);
+      if (distanceSq < bestDistanceSq) {
+        bestDistanceSq = distanceSq;
+        bestIndex = i + 1;
+      }
+    }
+
+    return bestIndex;
+  }
+
+  double _distanceToSegmentSquared(Offset point, Offset start, Offset end) {
+    final segment = end - start;
+    final lengthSq = segment.dx * segment.dx + segment.dy * segment.dy;
+    if (lengthSq == 0) {
+      final d = point - start;
+      return d.dx * d.dx + d.dy * d.dy;
+    }
+
+    final rawT = ((point.dx - start.dx) * segment.dx +
+            (point.dy - start.dy) * segment.dy) /
+        lengthSq;
+    final t = rawT.clamp(0.0, 1.0);
+    final projection = Offset(
+      start.dx + segment.dx * t,
+      start.dy + segment.dy * t,
+    );
+    final d = point - projection;
+    return d.dx * d.dx + d.dy * d.dy;
+  }
+
   Future<ExportOptions> loadExportOptions() {
     return _exportPreferencesService.load();
   }
@@ -409,7 +456,13 @@ class EditorController extends StateNotifier<EditorState> {
   }
 
   Future<String?> pickExportPath() {
-    return _fileIoService.pickPngSavePath(defaultFileName: suggestedExportFileName());
+    return _fileIoService.pickPngSavePath(
+        defaultFileName: suggestedExportFileName());
+  }
+
+  @visibleForTesting
+  int debugNearestPolygonInsertIndex(List<Offset> polygon, Offset point) {
+    return _nearestPolygonInsertIndex(polygon, point);
   }
 
   String suggestedExportFileName() {

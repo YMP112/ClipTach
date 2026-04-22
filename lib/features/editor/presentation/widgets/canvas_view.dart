@@ -298,7 +298,8 @@ class _CanvasPainter extends CustomPainter {
       )..layout(maxWidth: size.width - 40);
       textPainter.paint(
         canvas,
-        Offset((size.width - textPainter.width) / 2, (size.height - textPainter.height) / 2),
+        Offset((size.width - textPainter.width) / 2,
+            (size.height - textPainter.height) / 2),
       );
       return;
     }
@@ -313,16 +314,17 @@ class _CanvasPainter extends CustomPainter {
         _drawStrokeList(canvas, state.keepStrokes, const Color(0x9900D878));
         _drawStrokeList(canvas, state.eraseStrokes, const Color(0x99FF3B30));
         if (state.polygonDraft.isNotEmpty) {
-          _drawPolygonDraft(canvas, state.polygonDraft);
+          _drawPolygonDraft(canvas, state.polygonDraft, zoom);
         }
       }
     } else {
-        final extracted = state.extractedImage;
-        if (extracted != null) {
+      final extracted = state.extractedImage;
+      if (extracted != null) {
         final baseW = state.objectBaseWidth <= 0
             ? extracted.width.toDouble()
             : state.objectBaseWidth;
-        final scale = ((baseW + state.transform.scalePx) / baseW).clamp(0.05, 20.0);
+        final scale =
+            ((baseW + state.transform.scalePx) / baseW).clamp(0.05, 20.0);
         final skew = math.tan(state.transform.skewDeg * math.pi / 180);
         final m = Matrix4.identity()
           ..translateByDouble(
@@ -346,7 +348,9 @@ class _CanvasPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawPolygonDraft(Canvas canvas, List<Offset> points) {
+  void _drawPolygonDraft(Canvas canvas, List<Offset> points, double zoom) {
+    final safeZoom = zoom <= 0 ? 1.0 : zoom;
+    final vertexRadius = 6.0 / safeZoom;
     final border = Paint()
       ..color = const Color(0xFF007AFF)
       ..style = PaintingStyle.stroke
@@ -378,7 +382,7 @@ class _CanvasPainter extends CustomPainter {
     }
 
     for (final p in points) {
-      canvas.drawCircle(p, 3.5, vertexPaint);
+      canvas.drawCircle(p, vertexRadius, vertexPaint);
     }
   }
 
@@ -395,7 +399,8 @@ class _CanvasPainter extends CustomPainter {
         canvas.drawLine(stroke.points[i - 1], stroke.points[i], paint);
       }
       if (stroke.points.length == 1) {
-        canvas.drawCircle(stroke.points.first, math.max(1, stroke.brushSize / 2), paint);
+        canvas.drawCircle(
+            stroke.points.first, math.max(1, stroke.brushSize / 2), paint);
       }
     }
   }
