@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/models/export_options.dart';
 import '../domain/editor_state.dart';
 
 class ImageProcessingService {
@@ -102,7 +103,13 @@ class ImageProcessingService {
     required double objectBaseWidth,
     required double objectPivotX,
     required double objectPivotY,
+    required ExportOptions options,
   }) async {
+    final workWidth = extractedImage.width * 3;
+    final workHeight = extractedImage.height * 3;
+    final workOffsetX = extractedImage.width.toDouble();
+    final workOffsetY = extractedImage.height.toDouble();
+
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     final baseW = objectBaseWidth <= 0 ? extractedImage.width.toDouble() : objectBaseWidth;
@@ -111,29 +118,114 @@ class ImageProcessingService {
 
     final matrix = Matrix4.identity()
       ..translateByDouble(
-        objectPivotX + transform.translateX,
-        objectPivotY + transform.translateY,
+        workOffsetX + objectPivotX + transform.translateX,
+        workOffsetY + objectPivotY + transform.translateY,
         0,
         1,
       )
       ..rotateZ(transform.rotationDeg * math.pi / 180)
       ..setEntry(0, 1, skew)
       ..scaleByDouble(scale, scale, 1, 1)
-      ..translateByDouble(-objectPivotX, -objectPivotY, 0, 1);
+      ..translateByDouble(-objectPivotX - workOffsetX, -objectPivotY - workOffsetY, 0, 1);
 
     canvas.save();
     canvas.transform(matrix.storage);
-    canvas.drawImage(extractedImage, Offset.zero, Paint());
+    canvas.drawImage(
+      extractedImage,
+      Offset(workOffsetX, workOffsetY),
+      Paint(),
+    );
     canvas.restore();
 
-    final image = await recorder.endRecording().toImage(
-          extractedImage.width,
-          extractedImage.height,
+    final rendered = await recorder.endRecording().toImage(workWidth, workHeight);
+    final bbox = await _computeNonTransparentBounds(rendered);
+    if (bbox == null) {
+      throw StateError('No non-transparent object to export');
+    }
+
+    final margin = options.mode == ExportMode.withMargins
+        ? options.marginPx.clamp(0, 10000)
+        : 0;
+
+    final cropRecorder = ui.PictureRecorder();
+    final cropCanvas = Canvas(cropRecorder);
+    final outputWidth = bbox.width + (margin * 2);
+    final outputHeight = bbox.height + (margin * 2);
+
+    final srcRect = Rect.fromLTWH(
+      bbox.left.toDouble(),
+      bbox.top.toDouble(),
+      bbox.width.toDouble(),
+      bbox.height.toDouble(),
+    );
+    final dstRect = Rect.fromLTWH(
+      margin.toDouble(),
+      margin.toDouble(),
+      bbox.width.toDouble(),
+      bbox.height.toDouble(),
+    );
+
+    cropCanvas.drawImageRect(rendered, srcRect, dstRect, Paint());
+
+    final output = await cropRecorder.endRecording().toImage(
+          outputWidth,
+          outputHeight,
         );
-    final pngBytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = await output.toByteData(format: ui.ImageByteFormat.png);
     if (pngBytes == null) {
       throw StateError('Failed to encode png');
     }
     return pngBytes.buffer.asUint8List();
   }
+
+  Future<_AlphaBounds?> _computeNonTransparentBounds(ui.Image image) async {
+    final raw = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (raw == null) {
+      return null;
+    }
+    final bytes = raw.buffer.asUint8List();
+    final w = image.width;
+    final h = image.height;
+    var minX = w;
+    var minY = h;
+    var maxX = -1;
+    var maxY = -1;
+
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final alpha = bytes[(y * w + x) * 4 + 3];
+        if (alpha <= 8) {
+          continue;
+        }
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (maxX < minX || maxY < minY) {
+      return null;
+    }
+    return _AlphaBounds(
+      left: minX,
+      top: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1,
+    );
+  }
+}
+
+class _AlphaBounds {
+  _AlphaBounds({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+  });
+
+  final int left;
+  final int top;
+  final int width;
+  final int height;
 }

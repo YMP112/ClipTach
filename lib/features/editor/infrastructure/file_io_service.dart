@@ -54,10 +54,10 @@ class FileIoService {
     );
   }
 
-  Future<String?> pickPngSavePath() {
+  Future<String?> pickPngSavePath({String? defaultFileName}) {
     return FilePicker.platform.saveFile(
       dialogTitle: 'Export Transparent PNG',
-      fileName: 'result.png',
+      fileName: defaultFileName ?? 'result_clear.png',
     );
   }
 

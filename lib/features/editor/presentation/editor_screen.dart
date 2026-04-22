@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../app.dart';
+import '../../../core/models/export_options.dart';
 import '../../../core/services/recent_projects_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../infrastructure/file_io_service.dart';
@@ -108,7 +109,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               onOpenImage: () => _guardAsync(context, controller.openImage),
               onLoadProject: () => _guardAsync(context, controller.loadProject),
               onSaveProject: () => _guardAsync(context, controller.saveProject),
-              onExportPng: () => _guardAsync(context, controller.exportPng),
+              onExportPng: () => _guardAsync(context, () => _exportFlow(controller)),
               onUndo: controller.undo,
               onRedo: controller.redo,
               onReset: controller.resetAll,
@@ -214,6 +215,29 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         SnackBar(content: Text(e.toString())),
       );
     }
+  }
+
+  Future<void> _exportFlow(EditorController controller) async {
+    final initial = await controller.loadExportOptions();
+    if (!mounted) {
+      return;
+    }
+    final result = await showDialog<_ExportDialogResult>(
+      context: context,
+      builder: (_) => _ExportDialog(
+        initial: initial,
+        onPickPath: controller.pickExportPath,
+      ),
+    );
+    if (result == null) {
+      return;
+    }
+
+    await controller.saveExportOptions(result.options);
+    await controller.exportPng(
+      path: result.path,
+      options: result.options,
+    );
   }
 }
 
@@ -440,6 +464,181 @@ class _NumberValueRow extends StatelessWidget {
             child: const Text('0'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ExportDialogResult {
+  _ExportDialogResult({
+    required this.path,
+    required this.options,
+  });
+
+  final String path;
+  final ExportOptions options;
+}
+
+class _ExportDialog extends StatefulWidget {
+  const _ExportDialog({
+    required this.initial,
+    required this.onPickPath,
+  });
+
+  final ExportOptions initial;
+  final Future<String?> Function() onPickPath;
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  late ExportMode _mode;
+  late TextEditingController _marginController;
+  String? _path;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = widget.initial.mode;
+    _marginController = TextEditingController(
+      text: widget.initial.marginPx.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _marginController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Export PNG'),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Export Location'),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _path ?? 'No path selected',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    final path = await widget.onPickPath();
+                    if (!mounted || path == null) {
+                      return;
+                    }
+                    setState(() {
+                      _path = path;
+                    });
+                  },
+                  child: const Text('Choose...'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text('Export Mode'),
+            const SizedBox(height: 6),
+            SegmentedButton<ExportMode>(
+              segments: const [
+                ButtonSegment(
+                  value: ExportMode.withMargins,
+                  label: Text('With margins'),
+                ),
+                ButtonSegment(
+                  value: ExportMode.objectOnly,
+                  label: Text('Object only'),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (selection) {
+                setState(() => _mode = selection.first);
+              },
+            ),
+            if (_mode == ExportMode.withMargins)
+              Row(
+                children: [
+                  const Text('Margins (px):'),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      controller: _marginController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: false,
+                        signed: false,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            if (_mode == ExportMode.objectOnly)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Object only (tight rectangle)'),
+              ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _onExport,
+          child: const Text('Export'),
+        ),
+      ],
+    );
+  }
+
+  void _onExport() {
+    if (_path == null || _path!.isEmpty) {
+      setState(() => _error = 'Please choose an export location.');
+      return;
+    }
+
+    final margin = _mode == ExportMode.withMargins
+        ? int.tryParse(_marginController.text.trim())
+        : 0;
+    if (_mode == ExportMode.withMargins && (margin == null || margin < 0)) {
+      setState(() => _error = 'Margins must be a non-negative integer.');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _ExportDialogResult(
+        path: _path!,
+        options: ExportOptions(
+          mode: _mode,
+          marginPx: margin ?? 0,
+        ),
       ),
     );
   }

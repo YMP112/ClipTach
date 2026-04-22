@@ -3,8 +3,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
+import '../../../core/models/export_options.dart';
 import '../../../core/models/project_model.dart';
+import '../../../core/services/export_preferences_service.dart';
 import '../../../core/services/project_archive_service.dart';
 import '../../../core/services/recent_projects_service.dart';
 import '../domain/editor_state.dart';
@@ -20,6 +23,7 @@ final editorControllerProvider =
     fileIoService: FileIoService(),
     projectArchiveService: ProjectArchiveService(),
     recentProjectsService: RecentProjectsService(),
+    exportPreferencesService: ExportPreferencesService(),
   ),
 );
 
@@ -30,11 +34,13 @@ class EditorController extends StateNotifier<EditorState> {
     required FileIoService fileIoService,
     required ProjectArchiveService projectArchiveService,
     required RecentProjectsService recentProjectsService,
+    required ExportPreferencesService exportPreferencesService,
   })  : _imageProcessingService = imageProcessingService,
         _autoAssistService = autoAssistService,
         _fileIoService = fileIoService,
         _projectArchiveService = projectArchiveService,
         _recentProjectsService = recentProjectsService,
+        _exportPreferencesService = exportPreferencesService,
         super(const EditorState());
 
   final ImageProcessingService _imageProcessingService;
@@ -42,6 +48,7 @@ class EditorController extends StateNotifier<EditorState> {
   final FileIoService _fileIoService;
   final ProjectArchiveService _projectArchiveService;
   final RecentProjectsService _recentProjectsService;
+  final ExportPreferencesService _exportPreferencesService;
 
   Future<void> openImage() async {
     final opened = await _fileIoService.pickImage();
@@ -348,13 +355,12 @@ class EditorController extends StateNotifier<EditorState> {
     await _recentProjectsService.addRecentProject(path);
   }
 
-  Future<void> exportPng() async {
+  Future<void> exportPng({
+    required String path,
+    required ExportOptions options,
+  }) async {
     final extracted = state.extractedImage;
     if (extracted == null) {
-      return;
-    }
-    final path = await _fileIoService.pickPngSavePath();
-    if (path == null) {
       return;
     }
     final png = await _imageProcessingService.exportPng(
@@ -363,8 +369,27 @@ class EditorController extends StateNotifier<EditorState> {
       objectBaseWidth: state.objectBaseWidth,
       objectPivotX: state.objectPivotX,
       objectPivotY: state.objectPivotY,
+      options: options,
     );
     await _fileIoService.writeBytes(path, png);
+  }
+
+  Future<ExportOptions> loadExportOptions() {
+    return _exportPreferencesService.load();
+  }
+
+  Future<void> saveExportOptions(ExportOptions options) {
+    return _exportPreferencesService.save(options);
+  }
+
+  Future<String?> pickExportPath() {
+    return _fileIoService.pickPngSavePath(defaultFileName: suggestedExportFileName());
+  }
+
+  String suggestedExportFileName() {
+    final sourceName = state.sourceName ?? 'image.png';
+    final base = p.basenameWithoutExtension(sourceName);
+    return '${base}_clear.png';
   }
 
   void resetAll() {
@@ -450,6 +475,7 @@ class EditorController extends StateNotifier<EditorState> {
       objectBaseWidth: state.objectBaseWidth,
       objectPivotX: state.objectPivotX,
       objectPivotY: state.objectPivotY,
+      options: const ExportOptions(mode: ExportMode.objectOnly, marginPx: 0),
     );
   }
 
