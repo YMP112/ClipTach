@@ -310,6 +310,24 @@ class EditorController extends StateNotifier<EditorState> {
     updateTransform(scalePx: 0);
   }
 
+  void setObjectWidthPx(double widthPx) {
+    final baseW = state.objectBaseWidth;
+    if (baseW <= 0 || !widthPx.isFinite) {
+      return;
+    }
+    updateTransform(scalePx: _scalePxForTargetWidth(widthPx, baseW));
+  }
+
+  void setObjectHeightPx(double heightPx) {
+    final baseW = state.objectBaseWidth;
+    final baseH = state.objectBaseHeight;
+    if (baseW <= 0 || baseH <= 0 || !heightPx.isFinite) {
+      return;
+    }
+    final scale = (heightPx / baseH).clamp(0.05, 20.0);
+    updateTransform(scalePx: (baseW * scale) - baseW);
+  }
+
   void nudgeRotation(double deltaDeg) {
     updateTransform(rotationDeg: state.transform.rotationDeg + deltaDeg);
   }
@@ -450,6 +468,11 @@ class EditorController extends StateNotifier<EditorState> {
     );
     final d = point - projection;
     return d.dx * d.dx + d.dy * d.dy;
+  }
+
+  double _scalePxForTargetWidth(double widthPx, double baseWidth) {
+    final width = widthPx.clamp(baseWidth * 0.05, baseWidth * 20.0);
+    return width - baseWidth;
   }
 
   Future<ExportOptions> loadExportOptions() {

@@ -465,6 +465,15 @@ class _ObjectControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseW = state.objectBaseWidth <= 0 ? 1.0 : state.objectBaseWidth;
+    final baseH = state.objectBaseHeight <= 0 ? 1.0 : state.objectBaseHeight;
+    final scale = ((baseW + state.transform.scalePx) / baseW)
+        .clamp(0.05, 20.0)
+        .toDouble();
+    final currentW = baseW * scale;
+    final currentH = baseH * scale;
+    final scalePercent = scale * 100;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Column(
@@ -478,13 +487,34 @@ class _ObjectControls extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(loc.t('editObject')),
+              const SizedBox(width: 16),
+              Text(
+                '${currentW.round()} x ${currentH.round()} px '
+                '(${scalePercent.toStringAsFixed(0)}%)',
+              ),
             ],
           ),
           _NumberValueRow(
-            label: '${loc.t('scale')} (px)',
-            value: state.transform.scalePx,
-            onSubmit: (value) => controller.updateTransform(scalePx: value),
+            label: 'Width (px)',
+            value: currentW,
+            onSubmit: controller.setObjectWidthPx,
             onReset: controller.resetScalePx,
+            resetLabel: 'Original',
+          ),
+          _NumberValueRow(
+            label: 'Height (px)',
+            value: currentH,
+            onSubmit: controller.setObjectHeightPx,
+            onReset: controller.resetScalePx,
+            resetLabel: 'Original',
+          ),
+          _NumberValueRow(
+            label: '${loc.t('scale')} (%)',
+            value: scalePercent,
+            onSubmit: (value) =>
+                controller.setObjectWidthPx(baseW * (value / 100)),
+            onReset: controller.resetScalePx,
+            resetLabel: '100',
           ),
           _NumberValueRow(
             label: '${loc.t('rotate')} (°)',
@@ -510,12 +540,14 @@ class _NumberValueRow extends StatelessWidget {
     required this.value,
     required this.onSubmit,
     required this.onReset,
+    this.resetLabel = '0',
   });
 
   final String label;
   final double value;
   final ValueChanged<double> onSubmit;
   final VoidCallback onReset;
+  final String resetLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -548,7 +580,7 @@ class _NumberValueRow extends StatelessWidget {
           const SizedBox(width: 8),
           OutlinedButton(
             onPressed: onReset,
-            child: const Text('0'),
+            child: Text(resetLabel),
           ),
         ],
       ),
