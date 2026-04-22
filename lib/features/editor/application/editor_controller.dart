@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,6 +53,8 @@ class EditorController extends StateNotifier<EditorState> {
       sourceName: opened.fileName,
       sourceBytes: opened.bytes,
       sourceImage: image,
+      objectPivotX: image.width / 2,
+      objectPivotY: image.height / 2,
     );
   }
 
@@ -64,6 +67,8 @@ class EditorController extends StateNotifier<EditorState> {
       sourceName: fileName,
       sourceBytes: bytes,
       sourceImage: image,
+      objectPivotX: image.width / 2,
+      objectPivotY: image.height / 2,
     );
   }
 
@@ -193,11 +198,16 @@ class EditorController extends StateNotifier<EditorState> {
       source: source,
       mask: mask,
     );
+    final metrics = await _computeObjectMetrics(extracted);
     state = state.copyWith(
       extractedImage: extracted,
       phase: EditorPhase.object,
       polygonDraft: const <Offset>[],
       showMask: false,
+      objectBaseWidth: metrics.baseWidth,
+      objectBaseHeight: metrics.baseHeight,
+      objectPivotX: metrics.pivotX,
+      objectPivotY: metrics.pivotY,
     );
   }
 
@@ -227,17 +237,17 @@ class EditorController extends StateNotifier<EditorState> {
   }
 
   void updateTransform({
-    double? scale,
-    double? rotation,
-    double? skew,
+    double? scalePx,
+    double? rotationDeg,
+    double? skewDeg,
     double? translateX,
     double? translateY,
   }) {
     _pushUndo();
     final next = state.transform.copyWith(
-      scale: scale,
-      rotation: rotation,
-      skew: skew,
+      scalePx: scalePx,
+      rotationDeg: rotationDeg,
+      skewDeg: skewDeg,
       translateX: translateX,
       translateY: translateY,
     );
@@ -245,6 +255,26 @@ class EditorController extends StateNotifier<EditorState> {
       transform: next,
       redoStack: const <EditorSnapshot>[],
     );
+  }
+
+  void resetRotation() {
+    updateTransform(rotationDeg: 0);
+  }
+
+  void resetSkew() {
+    updateTransform(skewDeg: 0);
+  }
+
+  void resetScalePx() {
+    updateTransform(scalePx: 0);
+  }
+
+  void nudgeRotation(double deltaDeg) {
+    updateTransform(rotationDeg: state.transform.rotationDeg + deltaDeg);
+  }
+
+  void nudgeSkew(double deltaDeg) {
+    updateTransform(skewDeg: state.transform.skewDeg + deltaDeg);
   }
 
   void moveObjectBy(Offset delta) {
@@ -309,6 +339,8 @@ class EditorController extends StateNotifier<EditorState> {
       showMask: loaded.model.showMask,
       phase: loaded.model.phase,
       transform: loaded.model.transform,
+      objectPivotX: sourceImage.width / 2,
+      objectPivotY: sourceImage.height / 2,
     );
     if (state.phase == EditorPhase.object) {
       await extractObject();
@@ -328,6 +360,9 @@ class EditorController extends StateNotifier<EditorState> {
     final png = await _imageProcessingService.exportPng(
       extractedImage: extracted,
       transform: state.transform,
+      objectBaseWidth: state.objectBaseWidth,
+      objectPivotX: state.objectPivotX,
+      objectPivotY: state.objectPivotY,
     );
     await _fileIoService.writeBytes(path, png);
   }
@@ -412,6 +447,9 @@ class EditorController extends StateNotifier<EditorState> {
     return _imageProcessingService.exportPng(
       extractedImage: extracted,
       transform: state.transform,
+      objectBaseWidth: state.objectBaseWidth,
+      objectPivotX: state.objectPivotX,
+      objectPivotY: state.objectPivotY,
     );
   }
 
@@ -458,4 +496,74 @@ class EditorController extends StateNotifier<EditorState> {
     }
     return inside;
   }
+
+  Future<_ObjectMetrics> _computeObjectMetrics(ui.Image image) async {
+    final raw = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (raw == null) {
+      return _ObjectMetrics(
+        baseWidth: image.width.toDouble(),
+        baseHeight: image.height.toDouble(),
+        pivotX: image.width / 2,
+        pivotY: image.height / 2,
+      );
+    }
+
+    final bytes = raw.buffer.asUint8List();
+    final w = image.width;
+    final h = image.height;
+    var minX = w;
+    var minY = h;
+    var maxX = 0;
+    var maxY = 0;
+    var count = 0;
+
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final a = bytes[(y * w + x) * 4 + 3];
+        if (a <= 8) {
+          continue;
+        }
+        count++;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    if (count == 0 || maxX <= minX || maxY <= minY) {
+      return _ObjectMetrics(
+        baseWidth: image.width.toDouble(),
+        baseHeight: image.height.toDouble(),
+        pivotX: image.width / 2,
+        pivotY: image.height / 2,
+      );
+    }
+
+    final baseW = (maxX - minX + 1).toDouble();
+    final baseH = (maxY - minY + 1).toDouble();
+    final pivotX = minX + baseW / 2;
+    final pivotY = minY + baseH / 2;
+
+    return _ObjectMetrics(
+      baseWidth: baseW,
+      baseHeight: baseH,
+      pivotX: pivotX,
+      pivotY: pivotY,
+    );
+  }
+}
+
+class _ObjectMetrics {
+  _ObjectMetrics({
+    required this.baseWidth,
+    required this.baseHeight,
+    required this.pivotX,
+    required this.pivotY,
+  });
+
+  final double baseWidth;
+  final double baseHeight;
+  final double pivotX;
+  final double pivotY;
 }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -49,30 +50,30 @@ class ObjectTransform {
   const ObjectTransform({
     this.translateX = 0,
     this.translateY = 0,
-    this.scale = 1,
-    this.rotation = 0,
-    this.skew = 0,
+    this.scalePx = 0,
+    this.rotationDeg = 0,
+    this.skewDeg = 0,
   });
 
   final double translateX;
   final double translateY;
-  final double scale;
-  final double rotation;
-  final double skew;
+  final double scalePx;
+  final double rotationDeg;
+  final double skewDeg;
 
   ObjectTransform copyWith({
     double? translateX,
     double? translateY,
-    double? scale,
-    double? rotation,
-    double? skew,
+    double? scalePx,
+    double? rotationDeg,
+    double? skewDeg,
   }) {
     return ObjectTransform(
       translateX: translateX ?? this.translateX,
       translateY: translateY ?? this.translateY,
-      scale: scale ?? this.scale,
-      rotation: rotation ?? this.rotation,
-      skew: skew ?? this.skew,
+      scalePx: scalePx ?? this.scalePx,
+      rotationDeg: rotationDeg ?? this.rotationDeg,
+      skewDeg: skewDeg ?? this.skewDeg,
     );
   }
 
@@ -80,9 +81,9 @@ class ObjectTransform {
     return {
       'translateX': translateX,
       'translateY': translateY,
-      'scale': scale,
-      'rotation': rotation,
-      'skew': skew,
+      'scalePx': scalePx,
+      'rotationDeg': rotationDeg,
+      'skewDeg': skewDeg,
     };
   }
 
@@ -90,12 +91,19 @@ class ObjectTransform {
     if (json == null) {
       return const ObjectTransform();
     }
+    final oldScale = (json['scale'] as num?)?.toDouble();
+    final oldRotationRad = (json['rotation'] as num?)?.toDouble();
+    final oldSkewFactor = (json['skew'] as num?)?.toDouble();
+
     return ObjectTransform(
       translateX: (json['translateX'] as num?)?.toDouble() ?? 0,
       translateY: (json['translateY'] as num?)?.toDouble() ?? 0,
-      scale: (json['scale'] as num?)?.toDouble() ?? 1,
-      rotation: (json['rotation'] as num?)?.toDouble() ?? 0,
-      skew: (json['skew'] as num?)?.toDouble() ?? 0,
+      scalePx: (json['scalePx'] as num?)?.toDouble() ??
+          (((oldScale ?? 1) - 1) * 100),
+      rotationDeg: (json['rotationDeg'] as num?)?.toDouble() ??
+          ((oldRotationRad ?? 0) * 180 / math.pi),
+      skewDeg: (json['skewDeg'] as num?)?.toDouble() ??
+          (math.atan(oldSkewFactor ?? 0) * 180 / math.pi),
     );
   }
 }
@@ -141,6 +149,10 @@ class EditorState {
     this.showMask = true,
     this.phase = EditorPhase.mask,
     this.transform = const ObjectTransform(),
+    this.objectBaseWidth = 1,
+    this.objectBaseHeight = 1,
+    this.objectPivotX = 0,
+    this.objectPivotY = 0,
     this.undoStack = const <EditorSnapshot>[],
     this.redoStack = const <EditorSnapshot>[],
   });
@@ -158,6 +170,10 @@ class EditorState {
   final bool showMask;
   final EditorPhase phase;
   final ObjectTransform transform;
+  final double objectBaseWidth;
+  final double objectBaseHeight;
+  final double objectPivotX;
+  final double objectPivotY;
   final List<EditorSnapshot> undoStack;
   final List<EditorSnapshot> redoStack;
 
@@ -177,6 +193,10 @@ class EditorState {
     bool? showMask,
     EditorPhase? phase,
     ObjectTransform? transform,
+    double? objectBaseWidth,
+    double? objectBaseHeight,
+    double? objectPivotX,
+    double? objectPivotY,
     List<EditorSnapshot>? undoStack,
     List<EditorSnapshot>? redoStack,
     bool clearExtractedImage = false,
@@ -196,6 +216,10 @@ class EditorState {
       showMask: showMask ?? this.showMask,
       phase: phase ?? this.phase,
       transform: transform ?? this.transform,
+      objectBaseWidth: objectBaseWidth ?? this.objectBaseWidth,
+      objectBaseHeight: objectBaseHeight ?? this.objectBaseHeight,
+      objectPivotX: objectPivotX ?? this.objectPivotX,
+      objectPivotY: objectPivotY ?? this.objectPivotY,
       undoStack: undoStack ?? this.undoStack,
       redoStack: redoStack ?? this.redoStack,
     );

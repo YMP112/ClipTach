@@ -196,21 +196,24 @@ class _CanvasPainter extends CustomPainter {
         }
       }
     } else {
-      final extracted = state.extractedImage;
-      if (extracted != null) {
-        final w = extracted.width.toDouble();
-        final h = extracted.height.toDouble();
+        final extracted = state.extractedImage;
+        if (extracted != null) {
+        final baseW = state.objectBaseWidth <= 0
+            ? extracted.width.toDouble()
+            : state.objectBaseWidth;
+        final scale = ((baseW + state.transform.scalePx) / baseW).clamp(0.05, 20.0);
+        final skew = math.tan(state.transform.skewDeg * math.pi / 180);
         final m = Matrix4.identity()
           ..translateByDouble(
-            w / 2 + state.transform.translateX,
-            h / 2 + state.transform.translateY,
+            state.objectPivotX + state.transform.translateX,
+            state.objectPivotY + state.transform.translateY,
             0,
             1,
           )
-          ..rotateZ(state.transform.rotation)
-          ..setEntry(0, 1, state.transform.skew)
-          ..scaleByDouble(state.transform.scale, state.transform.scale, 1, 1)
-          ..translateByDouble(-w / 2, -h / 2, 0, 1);
+          ..rotateZ(state.transform.rotationDeg * math.pi / 180)
+          ..setEntry(0, 1, skew)
+          ..scaleByDouble(scale, scale, 1, 1)
+          ..translateByDouble(-state.objectPivotX, -state.objectPivotY, 0, 1);
 
         canvas.save();
         canvas.transform(m.storage);

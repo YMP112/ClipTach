@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -98,23 +99,27 @@ class ImageProcessingService {
   Future<Uint8List> exportPng({
     required ui.Image extractedImage,
     required ObjectTransform transform,
+    required double objectBaseWidth,
+    required double objectPivotX,
+    required double objectPivotY,
   }) async {
-    final w = extractedImage.width.toDouble();
-    final h = extractedImage.height.toDouble();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+    final baseW = objectBaseWidth <= 0 ? extractedImage.width.toDouble() : objectBaseWidth;
+    final scale = ((baseW + transform.scalePx) / baseW).clamp(0.05, 20.0);
+    final skew = math.tan(transform.skewDeg * math.pi / 180);
 
     final matrix = Matrix4.identity()
       ..translateByDouble(
-        w / 2 + transform.translateX,
-        h / 2 + transform.translateY,
+        objectPivotX + transform.translateX,
+        objectPivotY + transform.translateY,
         0,
         1,
       )
-      ..rotateZ(transform.rotation)
-      ..setEntry(0, 1, transform.skew)
-      ..scaleByDouble(transform.scale, transform.scale, 1, 1)
-      ..translateByDouble(-w / 2, -h / 2, 0, 1);
+      ..rotateZ(transform.rotationDeg * math.pi / 180)
+      ..setEntry(0, 1, skew)
+      ..scaleByDouble(scale, scale, 1, 1)
+      ..translateByDouble(-objectPivotX, -objectPivotY, 0, 1);
 
     canvas.save();
     canvas.transform(matrix.storage);

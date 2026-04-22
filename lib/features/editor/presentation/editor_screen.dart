@@ -134,13 +134,58 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFCCD2DB)),
                 ),
-                child: CanvasView(
-                  state: state,
-                  emptyHint: loc.t('hintNoImage'),
-                  onStrokeStart: controller.startStroke,
-                  onStrokeUpdate: controller.appendStrokePoint,
-                  onObjectMove: controller.moveObjectBy,
-                  onPolygonPointTap: controller.addPolygonPoint,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: CanvasView(
+                        state: state,
+                        emptyHint: loc.t('hintNoImage'),
+                        onStrokeStart: controller.startStroke,
+                        onStrokeUpdate: controller.appendStrokePoint,
+                        onObjectMove: controller.moveObjectBy,
+                        onPolygonPointTap: controller.addPolygonPoint,
+                      ),
+                    ),
+                    if (state.phase == EditorPhase.object)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: '${loc.t('rotate')} -5',
+                                  onPressed: () => controller.nudgeRotation(-5),
+                                  icon: const Icon(Icons.rotate_left),
+                                ),
+                                IconButton(
+                                  tooltip: '${loc.t('rotate')} +5',
+                                  onPressed: () => controller.nudgeRotation(5),
+                                  icon: const Icon(Icons.rotate_right),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  tooltip: '${loc.t('skew')} -2',
+                                  onPressed: () => controller.nudgeSkew(-2),
+                                  icon: const Icon(Icons.format_italic),
+                                ),
+                                IconButton(
+                                  tooltip: '${loc.t('skew')} +2',
+                                  onPressed: () => controller.nudgeSkew(2),
+                                  icon: const Icon(Icons.title),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -324,44 +369,75 @@ class _ObjectControls extends StatelessWidget {
               Text(loc.t('editObject')),
             ],
           ),
-          Row(
-            children: [
-              SizedBox(width: 72, child: Text(loc.t('scale'))),
-              Expanded(
-                child: Slider(
-                  value: state.transform.scale,
-                  min: 0.2,
-                  max: 3,
-                  onChanged: (value) => controller.updateTransform(scale: value),
-                ),
-              ),
-            ],
+          _NumberValueRow(
+            label: '${loc.t('scale')} (px)',
+            value: state.transform.scalePx,
+            onSubmit: (value) => controller.updateTransform(scalePx: value),
+            onReset: controller.resetScalePx,
           ),
-          Row(
-            children: [
-              SizedBox(width: 72, child: Text(loc.t('rotate'))),
-              Expanded(
-                child: Slider(
-                  value: state.transform.rotation,
-                  min: -3.14,
-                  max: 3.14,
-                  onChanged: (value) => controller.updateTransform(rotation: value),
-                ),
-              ),
-            ],
+          _NumberValueRow(
+            label: '${loc.t('rotate')} (°)',
+            value: state.transform.rotationDeg,
+            onSubmit: (value) => controller.updateTransform(rotationDeg: value),
+            onReset: controller.resetRotation,
           ),
-          Row(
-            children: [
-              SizedBox(width: 72, child: Text(loc.t('skew'))),
-              Expanded(
-                child: Slider(
-                  value: state.transform.skew,
-                  min: -0.8,
-                  max: 0.8,
-                  onChanged: (value) => controller.updateTransform(skew: value),
-                ),
+          _NumberValueRow(
+            label: '${loc.t('skew')} (°)',
+            value: state.transform.skewDeg,
+            onSubmit: (value) => controller.updateTransform(skewDeg: value),
+            onReset: controller.resetSkew,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NumberValueRow extends StatelessWidget {
+  const _NumberValueRow({
+    required this.label,
+    required this.value,
+    required this.onSubmit,
+    required this.onReset,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onSubmit;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueText = value.toStringAsFixed(1);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          SizedBox(width: 100, child: Text(label)),
+          Expanded(
+            child: TextFormField(
+              key: ValueKey('$label-$valueText'),
+              initialValue: valueText,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
               ),
-            ],
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              onFieldSubmitted: (text) {
+                final parsed = double.tryParse(text.trim());
+                if (parsed != null) {
+                  onSubmit(parsed);
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton(
+            onPressed: onReset,
+            child: const Text('0'),
           ),
         ],
       ),
