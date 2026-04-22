@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/project_model.dart';
 import '../../../core/services/project_archive_service.dart';
 import '../domain/editor_state.dart';
+import '../infrastructure/auto_assist_service.dart';
 import '../infrastructure/file_io_service.dart';
 import '../infrastructure/image_processing_service.dart';
 
@@ -13,6 +14,7 @@ final editorControllerProvider =
     StateNotifierProvider<EditorController, EditorState>(
   (ref) => EditorController(
     imageProcessingService: ImageProcessingService(),
+    autoAssistService: AutoAssistService(),
     fileIoService: FileIoService(),
     projectArchiveService: ProjectArchiveService(),
   ),
@@ -21,14 +23,17 @@ final editorControllerProvider =
 class EditorController extends StateNotifier<EditorState> {
   EditorController({
     required ImageProcessingService imageProcessingService,
+    required AutoAssistService autoAssistService,
     required FileIoService fileIoService,
     required ProjectArchiveService projectArchiveService,
   })  : _imageProcessingService = imageProcessingService,
+        _autoAssistService = autoAssistService,
         _fileIoService = fileIoService,
         _projectArchiveService = projectArchiveService,
         super(const EditorState());
 
   final ImageProcessingService _imageProcessingService;
+  final AutoAssistService _autoAssistService;
   final FileIoService _fileIoService;
   final ProjectArchiveService _projectArchiveService;
 
@@ -129,6 +134,27 @@ class EditorController extends StateNotifier<EditorState> {
       extractedImage: extracted,
       phase: EditorPhase.object,
       showMask: false,
+    );
+  }
+
+  Future<void> autoAssist() async {
+    final source = state.sourceImage;
+    if (source == null || state.phase != EditorPhase.mask) {
+      return;
+    }
+    _pushUndo();
+    final suggestion = await _autoAssistService.suggest(source);
+    state = state.copyWith(
+      keepStrokes: <BrushStroke>[
+        ...state.keepStrokes,
+        ...suggestion.keepStrokes,
+      ],
+      eraseStrokes: <BrushStroke>[
+        ...state.eraseStrokes,
+        ...suggestion.eraseStrokes,
+      ],
+      redoStack: const <EditorSnapshot>[],
+      clearExtractedImage: true,
     );
   }
 

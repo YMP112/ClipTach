@@ -130,6 +130,25 @@ class _MaskControls extends StatelessWidget {
               ),
               Text(loc.t('showMask')),
               const Spacer(),
+              OutlinedButton.icon(
+                onPressed: state.hasImage
+                    ? () async {
+                        try {
+                          await controller.autoAssist();
+                        } catch (e) {
+                          if (!context.mounted) {
+                            return;
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())),
+                          );
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.auto_fix_high),
+                label: Text(loc.t('autoAssist')),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: state.hasImage ? controller.extractObject : null,
                 icon: const Icon(Icons.cut),
