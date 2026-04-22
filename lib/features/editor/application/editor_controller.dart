@@ -97,6 +97,28 @@ class EditorController extends StateNotifier<EditorState> {
     );
   }
 
+  void updatePolygonPoint(int index, Offset point) {
+    if (!state.hasImage || state.phase != EditorPhase.mask) {
+      return;
+    }
+    if (index < 0 || index >= state.polygonDraft.length) {
+      return;
+    }
+    final next = <Offset>[...state.polygonDraft];
+    next[index] = point;
+    state = state.copyWith(polygonDraft: next, clearExtractedImage: true);
+  }
+
+  void removeLastPolygonPoint() {
+    if (state.polygonDraft.isEmpty) {
+      return;
+    }
+    state = state.copyWith(
+      polygonDraft: state.polygonDraft.sublist(0, state.polygonDraft.length - 1),
+      clearExtractedImage: true,
+    );
+  }
+
   void clearPolygonDraft() {
     state = state.copyWith(polygonDraft: const <Offset>[]);
   }
@@ -191,7 +213,7 @@ class EditorController extends StateNotifier<EditorState> {
     }
   }
 
-  Future<void> extractObject() async {
+  Future<void> extractObject({bool preserveTransform = false}) async {
     final source = state.sourceImage;
     if (source == null) {
       return;
@@ -211,6 +233,7 @@ class EditorController extends StateNotifier<EditorState> {
       phase: EditorPhase.object,
       polygonDraft: const <Offset>[],
       showMask: false,
+      transform: preserveTransform ? state.transform : const ObjectTransform(),
       objectBaseWidth: metrics.baseWidth,
       objectBaseHeight: metrics.baseHeight,
       objectPivotX: metrics.pivotX,
@@ -240,7 +263,10 @@ class EditorController extends StateNotifier<EditorState> {
   }
 
   void setPhase(EditorPhase phase) {
-    state = state.copyWith(phase: phase);
+    state = state.copyWith(
+      phase: phase,
+      showMask: phase == EditorPhase.mask ? true : state.showMask,
+    );
   }
 
   void updateTransform({
@@ -350,7 +376,7 @@ class EditorController extends StateNotifier<EditorState> {
       objectPivotY: sourceImage.height / 2,
     );
     if (state.phase == EditorPhase.object) {
-      await extractObject();
+      await extractObject(preserveTransform: true);
     }
     await _recentProjectsService.addRecentProject(path);
   }

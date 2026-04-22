@@ -13,6 +13,7 @@ class CanvasView extends StatefulWidget {
     required this.onStrokeUpdate,
     required this.onObjectMove,
     required this.onPolygonPointTap,
+    required this.onPolygonPointMove,
     required this.handMode,
     required this.emptyHint,
   });
@@ -22,6 +23,7 @@ class CanvasView extends StatefulWidget {
   final ValueChanged<Offset> onStrokeUpdate;
   final ValueChanged<Offset> onObjectMove;
   final ValueChanged<Offset> onPolygonPointTap;
+  final void Function(int index, Offset point) onPolygonPointMove;
   final bool handMode;
   final String emptyHint;
 
@@ -39,6 +41,7 @@ class _CanvasViewState extends State<CanvasView> {
   int _activePointers = 0;
   Size _viewportSize = Size.zero;
   bool _needsAutoCenter = true;
+  int? _dragPolygonIndex;
 
   @override
   void didUpdateWidget(covariant CanvasView oldWidget) {
@@ -65,8 +68,19 @@ class _CanvasViewState extends State<CanvasView> {
       onPointerSignal: (event) {
         if (event is PointerScrollEvent) {
           final delta = event.scrollDelta.dy > 0 ? 0.92 : 1.08;
+          final mouse = event.localPosition;
+          final oldZoom = _zoom;
+          final newZoom = (_zoom * delta).clamp(0.2, 8).toDouble();
           setState(() {
-            _zoom = (_zoom * delta).clamp(0.2, 8);
+            _zoom = newZoom;
+            if (oldZoom != 0) {
+              final worldX = (mouse.dx - _pan.dx) / oldZoom;
+              final worldY = (mouse.dy - _pan.dy) / oldZoom;
+              _pan = Offset(
+                mouse.dx - worldX * newZoom,
+                mouse.dy - worldY * newZoom,
+              );
+            }
           });
         }
       },
@@ -89,11 +103,13 @@ class _CanvasViewState extends State<CanvasView> {
         _activePointers = (_activePointers - 1).clamp(0, 9999);
         _isRightMousePanning = false;
         _lastPanPointer = null;
+        _dragPolygonIndex = null;
       },
       onPointerCancel: (_) {
         _activePointers = (_activePointers - 1).clamp(0, 9999);
         _isRightMousePanning = false;
         _lastPanPointer = null;
+        _dragPolygonIndex = null;
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -143,6 +159,15 @@ class _CanvasViewState extends State<CanvasView> {
             widget.onStrokeUpdate(_toImageSpace(details.localFocalPoint));
             return;
           }
+          if (widget.state.phase == EditorPhase.mask &&
+              widget.state.maskTool == MaskTool.polygonKeep &&
+              _dragPolygonIndex != null) {
+            widget.onPolygonPointMove(
+              _dragPolygonIndex!,
+              _toImageSpace(details.localFocalPoint),
+            );
+            return;
+          }
           if (details.focalPointDelta != Offset.zero) {
             widget.onObjectMove(details.focalPointDelta / _zoom);
           }
@@ -152,6 +177,10 @@ class _CanvasViewState extends State<CanvasView> {
               widget.state.phase != EditorPhase.mask ||
               widget.handMode ||
               widget.state.maskTool != MaskTool.polygonKeep) {
+            return;
+          }
+          _dragPolygonIndex = _hitPolygonVertex(details.localPosition);
+          if (_dragPolygonIndex != null) {
             return;
           }
           widget.onPolygonPointTap(_toImageSpace(details.localPosition));
@@ -220,6 +249,24 @@ class _CanvasViewState extends State<CanvasView> {
         .clamp(0.0, source.height.toDouble())
         .toDouble();
     return Offset(x, y);
+  }
+
+  int? _hitPolygonVertex(Offset local) {
+    final list = widget.state.polygonDraft;
+    if (list.isEmpty) {
+      return null;
+    }
+    final imagePoint = _toImageSpace(local);
+    const hitRadius = 10.0;
+    final radiusInImageSpace = hitRadius / _zoom;
+    final thresholdSq = radiusInImageSpace * radiusInImageSpace;
+    for (var i = 0; i < list.length; i++) {
+      final d = list[i] - imagePoint;
+      if (d.dx * d.dx + d.dy * d.dy <= thresholdSq) {
+        return i;
+      }
+    }
+    return null;
   }
 }
 

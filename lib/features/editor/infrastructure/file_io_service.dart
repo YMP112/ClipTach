@@ -73,10 +73,27 @@ class FileIoService {
   }
 
   Future<void> writeBytes(String path, Uint8List bytes) {
-    return File(path).writeAsBytes(bytes);
+    return _writeBytesChecked(path, bytes);
   }
 
   Future<Uint8List> readBytes(String path) {
     return File(path).readAsBytes();
+  }
+
+  Future<void> _writeBytesChecked(String path, Uint8List bytes) async {
+    final file = File(path);
+    final dir = file.parent;
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    await file.writeAsBytes(bytes, flush: true);
+    final exists = await file.exists();
+    if (!exists) {
+      throw FileSystemException('Export failed: file was not created', path);
+    }
+    final length = await file.length();
+    if (length == 0) {
+      throw FileSystemException('Export failed: file is empty', path);
+    }
   }
 }

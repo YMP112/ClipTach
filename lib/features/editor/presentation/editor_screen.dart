@@ -146,6 +146,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                         onStrokeUpdate: controller.appendStrokePoint,
                         onObjectMove: controller.moveObjectBy,
                         onPolygonPointTap: controller.addPolygonPoint,
+                        onPolygonPointMove: controller.updatePolygonPoint,
                         handMode: _handMode,
                       ),
                     ),
@@ -225,7 +226,17 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             if (state.phase == EditorPhase.mask)
               _MaskControls(state: state, controller: controller, loc: loc)
             else
-              _ObjectControls(state: state, controller: controller, loc: loc),
+              _ObjectControls(
+                state: state,
+                controller: controller,
+                loc: loc,
+                onBackToMask: () {
+                  setState(() {
+                    _handMode = false;
+                  });
+                  controller.setPhase(EditorPhase.mask);
+                },
+              ),
           ],
         ),
       ),
@@ -284,6 +295,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     await controller.exportPng(
       path: result.path,
       options: result.options,
+    );
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('יוצא בהצלחה: ${result.path}')),
     );
   }
 }
@@ -387,6 +404,14 @@ class _MaskControls extends StatelessWidget {
                   label: Text(loc.t('clearPolygon')),
                 ),
                 const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: state.polygonDraft.isNotEmpty
+                      ? controller.removeLastPolygonPoint
+                      : null,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('מחק נקודה'),
+                ),
+                const SizedBox(width: 8),
                 FilledButton.tonalIcon(
                   onPressed:
                       state.polygonDraft.length >= 3 ? controller.applyPolygonKeep : null,
@@ -417,11 +442,13 @@ class _ObjectControls extends StatelessWidget {
     required this.state,
     required this.controller,
     required this.loc,
+    required this.onBackToMask,
   });
 
   final EditorState state;
   final EditorController controller;
   final AppLocalizations loc;
+  final VoidCallback onBackToMask;
 
   @override
   Widget build(BuildContext context) {
@@ -432,7 +459,7 @@ class _ObjectControls extends StatelessWidget {
           Row(
             children: [
               OutlinedButton.icon(
-                onPressed: () => controller.setPhase(EditorPhase.mask),
+                onPressed: onBackToMask,
                 icon: const Icon(Icons.edit),
                 label: Text(loc.t('editMask')),
               ),
