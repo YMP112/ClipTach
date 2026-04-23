@@ -64,7 +64,8 @@ class ImageProcessingService {
     required ui.Image source,
     required ui.Image mask,
   }) async {
-    final sourceRaw = await source.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final sourceRaw =
+        await source.toByteData(format: ui.ImageByteFormat.rawRgba);
     final maskRaw = await mask.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (sourceRaw == null || maskRaw == null) {
       throw StateError('Failed to read image bytes');
@@ -97,6 +98,28 @@ class ImageProcessingService {
     return completer.future;
   }
 
+  Future<double> computeMaskCoverage(ui.Image mask) async {
+    final raw = await mask.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (raw == null) {
+      return 0;
+    }
+    final bytes = raw.buffer.asUint8List();
+    if (bytes.isEmpty) {
+      return 0;
+    }
+    var selected = 0;
+    for (var i = 0; i < bytes.length; i += 4) {
+      if (bytes[i] > 8) {
+        selected++;
+      }
+    }
+    final total = mask.width * mask.height;
+    if (total <= 0) {
+      return 0;
+    }
+    return selected / total;
+  }
+
   Future<Uint8List> exportPng({
     required ui.Image extractedImage,
     required ObjectTransform transform,
@@ -112,7 +135,9 @@ class ImageProcessingService {
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    final baseW = objectBaseWidth <= 0 ? extractedImage.width.toDouble() : objectBaseWidth;
+    final baseW = objectBaseWidth <= 0
+        ? extractedImage.width.toDouble()
+        : objectBaseWidth;
     final scale = ((baseW + transform.scalePx) / baseW).clamp(0.05, 20.0);
     final skew = math.tan(transform.skewDeg * math.pi / 180);
 
@@ -126,7 +151,8 @@ class ImageProcessingService {
       ..rotateZ(transform.rotationDeg * math.pi / 180)
       ..setEntry(0, 1, skew)
       ..scaleByDouble(scale, scale, 1, 1)
-      ..translateByDouble(-objectPivotX - workOffsetX, -objectPivotY - workOffsetY, 0, 1);
+      ..translateByDouble(
+          -objectPivotX - workOffsetX, -objectPivotY - workOffsetY, 0, 1);
 
     canvas.save();
     canvas.transform(matrix.storage);
@@ -137,7 +163,8 @@ class ImageProcessingService {
     );
     canvas.restore();
 
-    final rendered = await recorder.endRecording().toImage(workWidth, workHeight);
+    final rendered =
+        await recorder.endRecording().toImage(workWidth, workHeight);
     final bbox = await _computeNonTransparentBounds(rendered);
     if (bbox == null) {
       throw StateError('No non-transparent object to export');

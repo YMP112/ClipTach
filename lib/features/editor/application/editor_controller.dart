@@ -28,6 +28,9 @@ final editorControllerProvider =
 );
 
 class EditorController extends StateNotifier<EditorState> {
+  static const double _minSelectedCoverage = 0.005;
+  static const double _maxSelectedCoverage = 0.995;
+
   EditorController({
     required ImageProcessingService imageProcessingService,
     required AutoAssistService autoAssistService,
@@ -231,6 +234,17 @@ class EditorController extends StateNotifier<EditorState> {
       keepStrokes: state.keepStrokes,
       eraseStrokes: state.eraseStrokes,
     );
+    final coverage = await _imageProcessingService.computeMaskCoverage(mask);
+    if (coverage <= _minSelectedCoverage) {
+      throw StateError(
+        'Selection is empty. Mark the object before extracting.',
+      );
+    }
+    if (coverage >= _maxSelectedCoverage) {
+      throw StateError(
+        'Selection covers the entire image. Refine the mask before extracting.',
+      );
+    }
     final extracted = await _imageProcessingService.extractObject(
       source: source,
       mask: mask,

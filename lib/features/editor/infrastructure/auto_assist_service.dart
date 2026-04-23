@@ -112,18 +112,14 @@ class AutoAssistService {
       return _fallback(w.toDouble(), h.toDouble());
     }
 
-    final erasePoints = _buildBorderPoints(w.toDouble(), h.toDouble());
     final shortSide = math.min(w, h).toDouble();
     final keepBrush = (shortSide / 70).clamp(8.0, 18.0);
-    final eraseBrush = (shortSide / 42).clamp(16.0, 28.0);
 
     return AutoAssistSuggestion(
       keepStrokes: <BrushStroke>[
         BrushStroke(points: keepPoints, brushSize: keepBrush),
       ],
-      eraseStrokes: <BrushStroke>[
-        BrushStroke(points: erasePoints, brushSize: eraseBrush),
-      ],
+      eraseStrokes: const <BrushStroke>[],
     );
   }
 
@@ -315,24 +311,8 @@ class AutoAssistService {
     }
     return AutoAssistSuggestion(
       keepStrokes: <BrushStroke>[BrushStroke(points: keep, brushSize: 16)],
-      eraseStrokes: <BrushStroke>[
-        BrushStroke(points: _buildBorderPoints(w, h), brushSize: 20),
-      ],
+      eraseStrokes: const <BrushStroke>[],
     );
-  }
-
-  List<Offset> _buildBorderPoints(double w, double h) {
-    final erase = <Offset>[];
-    const step = 16.0;
-    for (double x = 0; x <= w; x += step) {
-      erase.add(Offset(x, 0));
-      erase.add(Offset(x, h));
-    }
-    for (double y = 0; y <= h; y += step) {
-      erase.add(Offset(0, y));
-      erase.add(Offset(w, y));
-    }
-    return erase;
   }
 
   (double, double, double) _estimateBorderMeanColor(
