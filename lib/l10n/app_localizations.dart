@@ -41,6 +41,7 @@ class AppLocalizations {
       'polygonKeepTool': 'Polygon Keep',
       'applyPolygon': 'Apply Polygon',
       'clearPolygon': 'Clear Polygon',
+      'deletePoint': 'Delete Point',
       'editObject': 'Edit Object',
       'editMask': 'Edit Mask',
       'scale': 'Scale',
@@ -52,6 +53,24 @@ class AppLocalizations {
           'Open an image, mark what to keep, and export a transparent PNG.',
       'recentProjects': 'Recent Projects',
       'noRecentProjects': 'No recent projects yet.',
+      'handMode': 'Hand Mode',
+      'widthPx': 'Width (px)',
+      'heightPx': 'Height (px)',
+      'original': 'Original',
+      'fileName': 'File name',
+      'exportDialogTitle': 'Export PNG',
+      'exportLocation': 'Export Folder',
+      'exportNoFolder': 'No folder selected',
+      'choose': 'Choose...',
+      'exportMode': 'Export Mode',
+      'withMargins': 'With Margins',
+      'objectOnly': 'Object Only',
+      'objectOnlyHint': 'Object only (tight rectangle)',
+      'marginsPx': 'Margins (px):',
+      'cancel': 'Cancel',
+      'choosePathError': 'Choose an export folder.',
+      'marginError': 'Margin must be a non-negative integer.',
+      'exportSuccess': 'Exported successfully:',
     },
     'he': {
       'appTitle': 'ClipTach',
@@ -73,6 +92,7 @@ class AppLocalizations {
       'polygonKeepTool': 'פוליגון שמירה',
       'applyPolygon': 'החל פוליגון',
       'clearPolygon': 'נקה פוליגון',
+      'deletePoint': 'מחק נקודה',
       'editObject': 'ערוך אובייקט',
       'editMask': 'ערוך מסכה',
       'scale': 'קנה מידה',
@@ -80,10 +100,27 @@ class AppLocalizations {
       'skew': 'הטיה',
       'hintNoImage': 'פתח תמונה כדי להתחיל.',
       'language': 'שפה',
-      'homeIntro':
-          'פתח תמונה, סמן מה לשמור, וחלץ אובייקט עם רקע שקוף במהירות.',
+      'homeIntro': 'פתח תמונה, סמן מה לשמור, וייצא PNG שקוף במהירות.',
       'recentProjects': 'פרויקטים אחרונים',
       'noRecentProjects': 'אין פרויקטים אחרונים עדיין.',
+      'handMode': 'מצב יד',
+      'widthPx': 'רוחב (פיקסלים)',
+      'heightPx': 'גובה (פיקסלים)',
+      'original': 'מקורי',
+      'fileName': 'שם קובץ',
+      'exportDialogTitle': 'ייצוא PNG',
+      'exportLocation': 'תיקיית ייצוא',
+      'exportNoFolder': 'לא נבחרה תיקייה',
+      'choose': 'בחר...',
+      'exportMode': 'מצב ייצוא',
+      'withMargins': 'עם שוליים',
+      'objectOnly': 'אובייקט בלבד',
+      'objectOnlyHint': 'אובייקט בלבד (מלבן צמוד)',
+      'marginsPx': 'שוליים (פיקסלים):',
+      'cancel': 'ביטול',
+      'choosePathError': 'בחר תיקיית ייצוא.',
+      'marginError': 'ערך השוליים חייב להיות מספר שלם לא שלילי.',
+      'exportSuccess': 'יוצא בהצלחה:',
     },
   };
 
@@ -93,17 +130,18 @@ class AppLocalizations {
   }
 }
 
-class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
-  bool isSupported(Locale locale) =>
-      AppLocalizations.supportedLocales.any(
+  bool isSupported(Locale locale) => AppLocalizations.supportedLocales.any(
         (supported) => supported.languageCode == locale.languageCode,
       );
 
   @override
-  Future<AppLocalizations> load(Locale locale) async => AppLocalizations(locale);
+  Future<AppLocalizations> load(Locale locale) async =>
+      AppLocalizations(locale);
 
   @override
   bool shouldReload(covariant LocalizationsDelegate<AppLocalizations> old) =>

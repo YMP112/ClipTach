@@ -158,7 +158,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                       left: 12,
                       child: Card(
                         child: IconButton(
-                          tooltip: 'מצב יד',
+                          tooltip: loc.t('handMode'),
                           onPressed: () {
                             setState(() {
                               _handMode = !_handMode;
@@ -186,7 +186,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  tooltip: 'מצב יד',
+                                  tooltip: loc.t('handMode'),
                                   onPressed: () {
                                     setState(() {
                                       _handMode = !_handMode;
@@ -279,19 +279,20 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         suggestedFileName: controller.suggestedExportFileName(),
         onPickDirectory: controller.pickExportDirectory,
         labels: _ExportDialogLabels(
-          title: 'ייצוא PNG',
-          location: 'מיקום ייצוא',
-          noPath: 'לא נבחר נתיב',
-          choose: 'בחר...',
-          mode: 'מצב ייצוא',
-          withMargins: 'עם שוליים',
-          objectOnly: 'אובייקט בלבד',
-          objectOnlyHint: 'אובייקט בלבד (מלבן צמוד)',
-          marginsPx: 'שוליים (px):',
-          cancel: 'ביטול',
+          title: loc.t('exportDialogTitle'),
+          location: loc.t('exportLocation'),
+          noPath: loc.t('exportNoFolder'),
+          choose: loc.t('choose'),
+          fileName: loc.t('fileName'),
+          mode: loc.t('exportMode'),
+          withMargins: loc.t('withMargins'),
+          objectOnly: loc.t('objectOnly'),
+          objectOnlyHint: loc.t('objectOnlyHint'),
+          marginsPx: loc.t('marginsPx'),
+          cancel: loc.t('cancel'),
           export: loc.t('exportPng'),
-          choosePathError: 'בחר נתיב ייצוא.',
-          marginError: 'ערך שוליים חייב להיות מספר שלם לא שלילי.',
+          choosePathError: loc.t('choosePathError'),
+          marginError: loc.t('marginError'),
         ),
       ),
     );
@@ -309,7 +310,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('יוצא בהצלחה: ${result.path}')),
+      SnackBar(content: Text('${loc.t('exportSuccess')} ${result.path}')),
     );
   }
 }
@@ -420,7 +421,7 @@ class _MaskControls extends StatelessWidget {
                       ? controller.removeLastPolygonPoint
                       : null,
                   icon: const Icon(Icons.undo),
-                  label: const Text('מחק נקודה'),
+                  label: Text(loc.t('deletePoint')),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.tonalIcon(
@@ -495,18 +496,18 @@ class _ObjectControls extends StatelessWidget {
             ],
           ),
           _NumberValueRow(
-            label: 'Width (px)',
+            label: loc.t('widthPx'),
             value: currentW,
             onSubmit: controller.setObjectWidthPx,
             onReset: controller.resetScalePx,
-            resetLabel: 'Original',
+            resetLabel: loc.t('original'),
           ),
           _NumberValueRow(
-            label: 'Height (px)',
+            label: loc.t('heightPx'),
             value: currentH,
             onSubmit: controller.setObjectHeightPx,
             onReset: controller.resetScalePx,
-            resetLabel: 'Original',
+            resetLabel: loc.t('original'),
           ),
           _NumberValueRow(
             label: '${loc.t('scale')} (%)',
@@ -680,7 +681,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               ],
             ),
             const SizedBox(height: 6),
-            Text('File name: ${widget.suggestedFileName}'),
+            Text('${widget.labels.fileName}: ${widget.suggestedFileName}'),
             const SizedBox(height: 12),
             Text(widget.labels.mode),
             const SizedBox(height: 6),
@@ -790,6 +791,7 @@ class _ExportDialogLabels {
     required this.location,
     required this.noPath,
     required this.choose,
+    required this.fileName,
     required this.mode,
     required this.withMargins,
     required this.objectOnly,
@@ -805,6 +807,7 @@ class _ExportDialogLabels {
   final String location;
   final String noPath;
   final String choose;
+  final String fileName;
   final String mode;
   final String withMargins;
   final String objectOnly;
