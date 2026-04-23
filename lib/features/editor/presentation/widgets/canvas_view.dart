@@ -14,6 +14,7 @@ class CanvasView extends StatefulWidget {
     required this.onObjectMove,
     required this.onPolygonPointTap,
     required this.onPolygonPointMove,
+    required this.onPolygonPointDelete,
     required this.handMode,
     required this.emptyHint,
   });
@@ -24,6 +25,7 @@ class CanvasView extends StatefulWidget {
   final ValueChanged<Offset> onObjectMove;
   final ValueChanged<Offset> onPolygonPointTap;
   final void Function(int index, Offset point) onPolygonPointMove;
+  final ValueChanged<int> onPolygonPointDelete;
   final bool handMode;
   final String emptyHint;
 
@@ -184,6 +186,30 @@ class _CanvasViewState extends State<CanvasView> {
             return;
           }
           widget.onPolygonPointTap(_toImageSpace(details.localPosition));
+        },
+        onDoubleTapDown: (details) {
+          if (widget.state.sourceImage == null ||
+              widget.state.phase != EditorPhase.mask ||
+              widget.handMode ||
+              widget.state.maskTool != MaskTool.polygonKeep) {
+            return;
+          }
+          final index = _hitPolygonVertex(details.localPosition);
+          if (index != null) {
+            widget.onPolygonPointDelete(index);
+          }
+        },
+        onSecondaryTapDown: (details) {
+          if (widget.state.sourceImage == null ||
+              widget.state.phase != EditorPhase.mask ||
+              widget.handMode ||
+              widget.state.maskTool != MaskTool.polygonKeep) {
+            return;
+          }
+          final index = _hitPolygonVertex(details.localPosition);
+          if (index != null) {
+            widget.onPolygonPointDelete(index);
+          }
         },
         child: LayoutBuilder(
           builder: (context, constraints) {

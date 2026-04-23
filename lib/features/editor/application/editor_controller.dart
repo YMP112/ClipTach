@@ -129,6 +129,17 @@ class EditorController extends StateNotifier<EditorState> {
     );
   }
 
+  void removePolygonPointAt(int index) {
+    if (index < 0 || index >= state.polygonDraft.length) {
+      return;
+    }
+    final next = <Offset>[...state.polygonDraft]..removeAt(index);
+    state = state.copyWith(
+      polygonDraft: next,
+      clearExtractedImage: true,
+    );
+  }
+
   void clearPolygonDraft() {
     state = state.copyWith(polygonDraft: const <Offset>[]);
   }

@@ -150,6 +150,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                         onObjectMove: controller.moveObjectBy,
                         onPolygonPointTap: controller.addPolygonPoint,
                         onPolygonPointMove: controller.updatePolygonPoint,
+                        onPolygonPointDelete: controller.removePolygonPointAt,
                         handMode: _handMode,
                       ),
                     ),
@@ -432,6 +433,13 @@ class _MaskControls extends StatelessWidget {
                   label: Text(loc.t('applyPolygon')),
                 ),
                 const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    loc.t('polygonMultiHint'),
+                    style: const TextStyle(color: Color(0xFF5D6875)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
               Text(
                   '${loc.t('brushSize')}: ${state.brushSize.toStringAsFixed(0)}'),

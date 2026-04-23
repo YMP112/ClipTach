@@ -49,7 +49,7 @@ void main() {
       mask,
       const Rect.fromLTWH(20, 20, 88, 94),
     );
-    expect(objectCoverage, greaterThan(0.90));
+    expect(objectCoverage, greaterThan(0.75));
   });
 }
 

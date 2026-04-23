@@ -36,9 +36,9 @@ class AutoAssistService {
     final gridSize = gridW * gridH;
     final foreground = List<bool>.filled(gridSize, false);
 
-    final borderMean = _estimateBorderMeanColor(bytes, w, h);
-    final borderStd = _estimateBorderDistanceStd(bytes, w, h, borderMean);
-    final threshold = math.max(24.0, borderStd * 2.0 + 9.0);
+    final borderSamples = _collectBorderSamples(bytes, w, h);
+    final borderCenters = _clusterBorderColors(borderSamples, count: 3);
+    final threshold = _computeForegroundThreshold(borderSamples, borderCenters);
 
     for (var gy = 0; gy < gridH; gy++) {
       final y = gy * gridStep;
@@ -48,13 +48,11 @@ class AutoAssistService {
           continue;
         }
         final idx = (y * w + x) * 4;
-        final d = _colorDistance(
+        final d = _minDistanceToCenters(
           bytes[idx].toDouble(),
           bytes[idx + 1].toDouble(),
           bytes[idx + 2].toDouble(),
-          borderMean.$1,
-          borderMean.$2,
-          borderMean.$3,
+          borderCenters,
         );
         if (d > threshold) {
           foreground[gy * gridW + gx] = true;
@@ -101,10 +99,6 @@ class AutoAssistService {
     }
 
     final keepPoints = _buildKeepPoints(
-      labels: labels,
-      mainId: main.id,
-      gridW: gridW,
-      gridH: gridH,
       gridStep: gridStep,
       component: main,
     );
@@ -114,7 +108,7 @@ class AutoAssistService {
 
     final shortSide = math.min(w, h).toDouble();
     // Keep auto-assist fill dense enough to avoid "holey" masks.
-    final keepBrush = (shortSide / 52).clamp(12.0, 24.0);
+    final keepBrush = (shortSide / 18).clamp(20.0, 42.0);
 
     return AutoAssistSuggestion(
       keepStrokes: <BrushStroke>[
@@ -251,24 +245,16 @@ class AutoAssistService {
   }
 
   List<Offset> _buildKeepPoints({
-    required List<int> labels,
-    required int mainId,
-    required int gridW,
-    required int gridH,
     required int gridStep,
     required _Component component,
   }) {
     final points = <Offset>[];
-    final spacing = component.area > 25000 ? 2 : 1;
+    final spacing = component.area > 50000 ? 2 : 1;
 
     for (var gy = component.minY; gy <= component.maxY; gy++) {
       for (var gx = component.minX; gx <= component.maxX; gx++) {
         if ((gx - component.minX) % spacing != 0 ||
             (gy - component.minY) % spacing != 0) {
-          continue;
-        }
-        final idx = gy * gridW + gx;
-        if (labels[idx] != mainId) {
           continue;
         }
         points.add(
@@ -281,89 +267,134 @@ class AutoAssistService {
 
   AutoAssistSuggestion _fallback(double w, double h) {
     final keep = <Offset>[];
-    for (double y = h * 0.25; y <= h * 0.75; y += 10) {
-      for (double x = w * 0.25; x <= w * 0.75; x += 10) {
+    for (double y = h * 0.2; y <= h * 0.8; y += 6) {
+      for (double x = w * 0.2; x <= w * 0.8; x += 6) {
         keep.add(Offset(x, y));
       }
     }
+    final brush = (math.min(w, h) / 10).clamp(18.0, 34.0);
     return AutoAssistSuggestion(
-      keepStrokes: <BrushStroke>[BrushStroke(points: keep, brushSize: 16)],
+      keepStrokes: <BrushStroke>[BrushStroke(points: keep, brushSize: brush)],
       eraseStrokes: const <BrushStroke>[],
     );
   }
 
-  (double, double, double) _estimateBorderMeanColor(
+  List<(double, double, double)> _collectBorderSamples(
     Uint8List bytes,
     int w,
-    int h,
-  ) {
-    double totalR = 0;
-    double totalG = 0;
-    double totalB = 0;
-    var count = 0;
+    int h, {
+    int step = 4,
+  }) {
+    final samples = <(double, double, double)>[];
     const marginPercent = 0.1;
     final marginX = (w * marginPercent).floor();
     final marginY = (h * marginPercent).floor();
 
-    for (var y = 0; y < h; y += 4) {
-      for (var x = 0; x < w; x += 4) {
+    for (var y = 0; y < h; y += step) {
+      for (var x = 0; x < w; x += step) {
         final isBorder =
             x < marginX || x > w - marginX || y < marginY || y > h - marginY;
         if (!isBorder) {
           continue;
         }
         final idx = (y * w + x) * 4;
-        totalR += bytes[idx];
-        totalG += bytes[idx + 1];
-        totalB += bytes[idx + 2];
-        count++;
+        samples.add((
+          bytes[idx].toDouble(),
+          bytes[idx + 1].toDouble(),
+          bytes[idx + 2].toDouble(),
+        ));
       }
     }
-    if (count == 0) {
-      return (127, 127, 127);
+    if (samples.isEmpty) {
+      return <(double, double, double)>[(127, 127, 127)];
     }
-    return (totalR / count, totalG / count, totalB / count);
+    return samples;
   }
 
-  double _estimateBorderDistanceStd(
-    Uint8List bytes,
-    int w,
-    int h,
-    (double, double, double) mean,
-  ) {
-    final distances = <double>[];
-    const marginPercent = 0.1;
-    final marginX = (w * marginPercent).floor();
-    final marginY = (h * marginPercent).floor();
+  List<(double, double, double)> _clusterBorderColors(
+    List<(double, double, double)> samples, {
+    int count = 3,
+  }) {
+    if (samples.length <= count) {
+      return samples;
+    }
+    final centers = <(double, double, double)>[];
+    final step = math.max(1, samples.length ~/ count);
+    for (var i = 0; i < count; i++) {
+      centers.add(samples[math.min(samples.length - 1, i * step)]);
+    }
 
-    for (var y = 0; y < h; y += 4) {
-      for (var x = 0; x < w; x += 4) {
-        final isBorder =
-            x < marginX || x > w - marginX || y < marginY || y > h - marginY;
-        if (!isBorder) {
+    for (var iter = 0; iter < 6; iter++) {
+      final sumR = List<double>.filled(count, 0);
+      final sumG = List<double>.filled(count, 0);
+      final sumB = List<double>.filled(count, 0);
+      final hits = List<int>.filled(count, 0);
+
+      for (final s in samples) {
+        var bestIndex = 0;
+        var bestDist = double.infinity;
+        for (var i = 0; i < centers.length; i++) {
+          final c = centers[i];
+          final d = _colorDistance(s.$1, s.$2, s.$3, c.$1, c.$2, c.$3);
+          if (d < bestDist) {
+            bestDist = d;
+            bestIndex = i;
+          }
+        }
+        sumR[bestIndex] += s.$1;
+        sumG[bestIndex] += s.$2;
+        sumB[bestIndex] += s.$3;
+        hits[bestIndex]++;
+      }
+
+      for (var i = 0; i < count; i++) {
+        if (hits[i] == 0) {
           continue;
         }
-        final idx = (y * w + x) * 4;
-        distances.add(
-          _colorDistance(
-            bytes[idx].toDouble(),
-            bytes[idx + 1].toDouble(),
-            bytes[idx + 2].toDouble(),
-            mean.$1,
-            mean.$2,
-            mean.$3,
-          ),
+        centers[i] = (
+          sumR[i] / hits[i],
+          sumG[i] / hits[i],
+          sumB[i] / hits[i],
         );
       }
     }
+
+    return centers;
+  }
+
+  double _computeForegroundThreshold(
+    List<(double, double, double)> borderSamples,
+    List<(double, double, double)> borderCenters,
+  ) {
+    final distances = <double>[];
+    for (final s in borderSamples) {
+      distances.add(_minDistanceToCenters(s.$1, s.$2, s.$3, borderCenters));
+    }
     if (distances.isEmpty) {
-      return 8;
+      return 24;
     }
     final avg = distances.reduce((a, b) => a + b) / distances.length;
     final variance =
         distances.map((d) => (d - avg) * (d - avg)).reduce((a, b) => a + b) /
             distances.length;
-    return math.sqrt(variance);
+    final std = math.sqrt(variance);
+    return (avg + std * 2.1 + 5).clamp(18.0, 78.0);
+  }
+
+  double _minDistanceToCenters(
+    double r,
+    double g,
+    double b,
+    List<(double, double, double)> centers,
+  ) {
+    var best = double.infinity;
+    for (final c in centers) {
+      final d = _colorDistance(r, g, b, c.$1, c.$2, c.$3);
+      if (d < best) {
+        best = d;
+      }
+    }
+    return best;
   }
 
   bool _nearBorder(int x, int y, int w, int h, double ratio) {
