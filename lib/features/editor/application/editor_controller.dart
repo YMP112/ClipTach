@@ -255,7 +255,11 @@ class EditorController extends StateNotifier<EditorState> {
       return;
     }
     _pushUndo();
-    final suggestion = await _autoAssistService.suggest(source);
+    final suggestion = await _autoAssistService.suggest(
+      source,
+      keepHints: state.keepStrokes,
+      eraseHints: state.eraseStrokes,
+    );
     state = state.copyWith(
       keepStrokes: <BrushStroke>[
         ...state.keepStrokes,

@@ -1,6 +1,6 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -17,7 +17,11 @@ class AutoAssistSuggestion {
 }
 
 class AutoAssistService {
-  Future<AutoAssistSuggestion> suggest(ui.Image source) async {
+  Future<AutoAssistSuggestion> suggest(
+    ui.Image source, {
+    List<BrushStroke> keepHints = const <BrushStroke>[],
+    List<BrushStroke> eraseHints = const <BrushStroke>[],
+  }) async {
     final raw = await source.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (raw == null) {
       return _fallback(source.width.toDouble(), source.height.toDouble());
@@ -26,21 +30,21 @@ class AutoAssistService {
     final bytes = raw.buffer.asUint8List();
     final w = source.width;
     final h = source.height;
+    const gridStep = 2;
+    final gridW = ((w - 1) ~/ gridStep) + 1;
+    final gridH = ((h - 1) ~/ gridStep) + 1;
+    final gridSize = gridW * gridH;
+    final foreground = List<bool>.filled(gridSize, false);
 
     final borderMean = _estimateBorderMeanColor(bytes, w, h);
     final borderStd = _estimateBorderDistanceStd(bytes, w, h, borderMean);
-    final threshold = math.max(26.0, borderStd * 2.2 + 10);
+    final threshold = math.max(24.0, borderStd * 2.0 + 9.0);
 
-    final keepPoints = <Offset>[];
-    int minX = w;
-    int minY = h;
-    int maxX = 0;
-    int maxY = 0;
-    var fgCount = 0;
-
-    for (var y = 2; y < h - 2; y += 2) {
-      for (var x = 2; x < w - 2; x += 2) {
-        if (_nearBorder(x, y, w, h, 0.04)) {
+    for (var gy = 0; gy < gridH; gy++) {
+      final y = gy * gridStep;
+      for (var gx = 0; gx < gridW; gx++) {
+        final x = gx * gridStep;
+        if (_nearBorder(x, y, w, h, 0.035)) {
           continue;
         }
         final idx = (y * w + x) * 4;
@@ -53,42 +57,253 @@ class AutoAssistService {
           borderMean.$3,
         );
         if (d > threshold) {
-          fgCount++;
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
+          foreground[gy * gridW + gx] = true;
         }
       }
     }
 
-    if (fgCount < 150 || maxX <= minX || maxY <= minY) {
+    final labels = List<int>.filled(gridSize, -1);
+    final components = _labelComponents(foreground, labels, gridW, gridH);
+    if (components.isEmpty) {
       return _fallback(w.toDouble(), h.toDouble());
     }
 
-    final padX = ((maxX - minX) * 0.06).round();
-    final padY = ((maxY - minY) * 0.06).round();
-    minX = (minX - padX).clamp(0, w - 1);
-    minY = (minY - padY).clamp(0, h - 1);
-    maxX = (maxX + padX).clamp(0, w - 1);
-    maxY = (maxY + padY).clamp(0, h - 1);
+    final keepHits = _collectHintHits(
+      hints: keepHints,
+      labels: labels,
+      gridW: gridW,
+      gridH: gridH,
+      gridStep: gridStep,
+      maxX: w - 1,
+      maxY: h - 1,
+    );
+    final eraseHits = _collectHintHits(
+      hints: eraseHints,
+      labels: labels,
+      gridW: gridW,
+      gridH: gridH,
+      gridStep: gridStep,
+      maxX: w - 1,
+      maxY: h - 1,
+    );
 
-    for (var y = minY; y <= maxY; y += 6) {
-      for (var x = minX; x <= maxX; x += 6) {
-        keepPoints.add(Offset(x.toDouble(), y.toDouble()));
-      }
+    final minArea = math.max(10, (gridSize * 0.0015).round());
+    final main = _selectMainComponent(
+      components: components,
+      keepHits: keepHits,
+      eraseHits: eraseHits,
+      gridCenterX: gridW / 2,
+      gridCenterY: gridH / 2,
+      minArea: minArea,
+    );
+    if (main == null) {
+      return _fallback(w.toDouble(), h.toDouble());
+    }
+
+    final keepPoints = _buildKeepPoints(
+      labels: labels,
+      mainId: main.id,
+      gridW: gridW,
+      gridH: gridH,
+      gridStep: gridStep,
+      component: main,
+    );
+    if (keepPoints.length < 20) {
+      return _fallback(w.toDouble(), h.toDouble());
     }
 
     final erasePoints = _buildBorderPoints(w.toDouble(), h.toDouble());
+    final shortSide = math.min(w, h).toDouble();
+    final keepBrush = (shortSide / 70).clamp(8.0, 18.0);
+    final eraseBrush = (shortSide / 42).clamp(16.0, 28.0);
 
     return AutoAssistSuggestion(
       keepStrokes: <BrushStroke>[
-        BrushStroke(points: keepPoints, brushSize: 12),
+        BrushStroke(points: keepPoints, brushSize: keepBrush),
       ],
       eraseStrokes: <BrushStroke>[
-        BrushStroke(points: erasePoints, brushSize: 20),
+        BrushStroke(points: erasePoints, brushSize: eraseBrush),
       ],
     );
+  }
+
+  List<_Component> _labelComponents(
+    List<bool> foreground,
+    List<int> labels,
+    int gridW,
+    int gridH,
+  ) {
+    final components = <_Component>[];
+    final stack = <int>[];
+
+    for (var i = 0; i < foreground.length; i++) {
+      if (!foreground[i] || labels[i] != -1) {
+        continue;
+      }
+
+      final id = components.length;
+      final component = _Component(id: id);
+      labels[i] = id;
+      stack.add(i);
+
+      while (stack.isNotEmpty) {
+        final current = stack.removeLast();
+        final gx = current % gridW;
+        final gy = current ~/ gridW;
+        component.add(gx, gy);
+
+        _tryVisit(gx - 1, gy, gridW, gridH, id, foreground, labels, stack);
+        _tryVisit(gx + 1, gy, gridW, gridH, id, foreground, labels, stack);
+        _tryVisit(gx, gy - 1, gridW, gridH, id, foreground, labels, stack);
+        _tryVisit(gx, gy + 1, gridW, gridH, id, foreground, labels, stack);
+      }
+      components.add(component);
+    }
+    return components;
+  }
+
+  void _tryVisit(
+    int gx,
+    int gy,
+    int gridW,
+    int gridH,
+    int id,
+    List<bool> foreground,
+    List<int> labels,
+    List<int> stack,
+  ) {
+    if (gx < 0 || gy < 0 || gx >= gridW || gy >= gridH) {
+      return;
+    }
+    final idx = gy * gridW + gx;
+    if (!foreground[idx] || labels[idx] != -1) {
+      return;
+    }
+    labels[idx] = id;
+    stack.add(idx);
+  }
+
+  Map<int, int> _collectHintHits({
+    required List<BrushStroke> hints,
+    required List<int> labels,
+    required int gridW,
+    required int gridH,
+    required int gridStep,
+    required int maxX,
+    required int maxY,
+  }) {
+    final hits = <int, int>{};
+    for (final stroke in hints) {
+      if (stroke.points.isEmpty) {
+        continue;
+      }
+      final stride = math.max(1, stroke.points.length ~/ 30);
+      for (var i = 0; i < stroke.points.length; i += stride) {
+        final p = stroke.points[i];
+        final x = p.dx.round().clamp(0, maxX);
+        final y = p.dy.round().clamp(0, maxY);
+        final gx = x ~/ gridStep;
+        final gy = y ~/ gridStep;
+        if (gx < 0 || gy < 0 || gx >= gridW || gy >= gridH) {
+          continue;
+        }
+        final id = labels[gy * gridW + gx];
+        if (id >= 0) {
+          hits[id] = (hits[id] ?? 0) + 1;
+        }
+      }
+    }
+    return hits;
+  }
+
+  _Component? _selectMainComponent({
+    required List<_Component> components,
+    required Map<int, int> keepHits,
+    required Map<int, int> eraseHits,
+    required double gridCenterX,
+    required double gridCenterY,
+    required int minArea,
+  }) {
+    _Component? best;
+    var bestScore = double.negativeInfinity;
+
+    for (final c in components) {
+      if (c.area < minArea) {
+        continue;
+      }
+      final keep = keepHits[c.id] ?? 0;
+      final erase = eraseHits[c.id] ?? 0;
+      final dx = c.centerX - gridCenterX;
+      final dy = c.centerY - gridCenterY;
+      final centerDistance = math.sqrt(dx * dx + dy * dy);
+      final density = c.area / math.max(1, c.boxArea);
+
+      final score = c.area.toDouble() +
+          keep * 3500.0 -
+          erase * 5000.0 -
+          centerDistance * 1.1 +
+          density * 240.0;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+
+    return best;
+  }
+
+  List<Offset> _buildKeepPoints({
+    required List<int> labels,
+    required int mainId,
+    required int gridW,
+    required int gridH,
+    required int gridStep,
+    required _Component component,
+  }) {
+    final points = <Offset>[];
+    const baseSpacing = 3;
+    final spacing = component.area > 20000
+        ? baseSpacing + 2
+        : (component.area > 7000 ? baseSpacing + 1 : baseSpacing);
+
+    for (var gy = component.minY; gy <= component.maxY; gy++) {
+      for (var gx = component.minX; gx <= component.maxX; gx++) {
+        if ((gx - component.minX) % spacing != 0 ||
+            (gy - component.minY) % spacing != 0) {
+          continue;
+        }
+        final idx = gy * gridW + gx;
+        if (labels[idx] != mainId) {
+          continue;
+        }
+        points.add(
+            Offset((gx * gridStep).toDouble(), (gy * gridStep).toDouble()));
+      }
+    }
+
+    if (points.isEmpty) {
+      return points;
+    }
+
+    final padX = ((component.maxX - component.minX) * 0.04).round();
+    final padY = ((component.maxY - component.minY) * 0.04).round();
+    final minX = math.max(0, component.minX - padX);
+    final minY = math.max(0, component.minY - padY);
+    final maxX = math.min(gridW - 1, component.maxX + padX);
+    final maxY = math.min(gridH - 1, component.maxY + padY);
+
+    final expanded = <Offset>[];
+    for (var gy = minY; gy <= maxY; gy += spacing) {
+      for (var gx = minX; gx <= maxX; gx += spacing) {
+        final idx = gy * gridW + gx;
+        if (labels[idx] == mainId) {
+          expanded.add(
+              Offset((gx * gridStep).toDouble(), (gy * gridStep).toDouble()));
+        }
+      }
+    }
+    return expanded.isNotEmpty ? expanded : points;
   }
 
   AutoAssistSuggestion _fallback(double w, double h) {
@@ -120,7 +335,11 @@ class AutoAssistService {
     return erase;
   }
 
-  (double, double, double) _estimateBorderMeanColor(Uint8List bytes, int w, int h) {
+  (double, double, double) _estimateBorderMeanColor(
+    Uint8List bytes,
+    int w,
+    int h,
+  ) {
     double totalR = 0;
     double totalG = 0;
     double totalB = 0;
@@ -184,10 +403,9 @@ class AutoAssistService {
       return 8;
     }
     final avg = distances.reduce((a, b) => a + b) / distances.length;
-    final variance = distances
-            .map((d) => (d - avg) * (d - avg))
-            .reduce((a, b) => a + b) /
-        distances.length;
+    final variance =
+        distances.map((d) => (d - avg) * (d - avg)).reduce((a, b) => a + b) /
+            distances.length;
     return math.sqrt(variance);
   }
 
@@ -210,4 +428,31 @@ class AutoAssistService {
     final db = b1 - b2;
     return math.sqrt(dr * dr + dg * dg + db * db);
   }
+}
+
+class _Component {
+  _Component({required this.id});
+
+  final int id;
+  int area = 0;
+  int minX = 1 << 30;
+  int minY = 1 << 30;
+  int maxX = -1;
+  int maxY = -1;
+  int sumX = 0;
+  int sumY = 0;
+
+  void add(int x, int y) {
+    area++;
+    sumX += x;
+    sumY += y;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+
+  double get centerX => area == 0 ? 0 : sumX / area;
+  double get centerY => area == 0 ? 0 : sumY / area;
+  int get boxArea => (maxX - minX + 1) * (maxY - minY + 1);
 }
