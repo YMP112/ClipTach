@@ -113,7 +113,8 @@ class AutoAssistService {
     }
 
     final shortSide = math.min(w, h).toDouble();
-    final keepBrush = (shortSide / 70).clamp(8.0, 18.0);
+    // Keep auto-assist fill dense enough to avoid "holey" masks.
+    final keepBrush = (shortSide / 52).clamp(12.0, 24.0);
 
     return AutoAssistSuggestion(
       keepStrokes: <BrushStroke>[
@@ -258,10 +259,7 @@ class AutoAssistService {
     required _Component component,
   }) {
     final points = <Offset>[];
-    const baseSpacing = 3;
-    final spacing = component.area > 20000
-        ? baseSpacing + 2
-        : (component.area > 7000 ? baseSpacing + 1 : baseSpacing);
+    final spacing = component.area > 25000 ? 2 : 1;
 
     for (var gy = component.minY; gy <= component.maxY; gy++) {
       for (var gx = component.minX; gx <= component.maxX; gx++) {
@@ -278,28 +276,7 @@ class AutoAssistService {
       }
     }
 
-    if (points.isEmpty) {
-      return points;
-    }
-
-    final padX = ((component.maxX - component.minX) * 0.04).round();
-    final padY = ((component.maxY - component.minY) * 0.04).round();
-    final minX = math.max(0, component.minX - padX);
-    final minY = math.max(0, component.minY - padY);
-    final maxX = math.min(gridW - 1, component.maxX + padX);
-    final maxY = math.min(gridH - 1, component.maxY + padY);
-
-    final expanded = <Offset>[];
-    for (var gy = minY; gy <= maxY; gy += spacing) {
-      for (var gx = minX; gx <= maxX; gx += spacing) {
-        final idx = gy * gridW + gx;
-        if (labels[idx] == mainId) {
-          expanded.add(
-              Offset((gx * gridStep).toDouble(), (gy * gridStep).toDouble()));
-        }
-      }
-    }
-    return expanded.isNotEmpty ? expanded : points;
+    return points;
   }
 
   AutoAssistSuggestion _fallback(double w, double h) {
