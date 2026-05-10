@@ -90,6 +90,10 @@ class EditorController extends StateNotifier<EditorState> {
     state = state.copyWith(maskTool: tool);
   }
 
+  void setAutoAssistMultiObject(bool value) {
+    state = state.copyWith(autoAssistMultiObject: value);
+  }
+
   void addPolygonPoint(Offset point) {
     if (!state.hasImage || state.phase != EditorPhase.mask) {
       return;
@@ -284,6 +288,7 @@ class EditorController extends StateNotifier<EditorState> {
       source,
       keepHints: state.keepStrokes,
       eraseHints: state.eraseStrokes,
+      allowMultiObject: state.autoAssistMultiObject,
     );
     state = state.copyWith(
       keepStrokes: <BrushStroke>[

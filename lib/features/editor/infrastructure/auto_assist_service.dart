@@ -21,6 +21,7 @@ class AutoAssistService {
     ui.Image source, {
     List<BrushStroke> keepHints = const <BrushStroke>[],
     List<BrushStroke> eraseHints = const <BrushStroke>[],
+    bool allowMultiObject = false,
   }) async {
     final raw = await source.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (raw == null) {
@@ -86,21 +87,25 @@ class AutoAssistService {
     );
 
     final minArea = math.max(10, (gridSize * 0.0015).round());
-    final main = _selectMainComponent(
+    final selectedIds = _selectComponentIds(
       components: components,
       keepHits: keepHits,
       eraseHits: eraseHits,
       gridCenterX: gridW / 2,
       gridCenterY: gridH / 2,
       minArea: minArea,
+      allowMultiObject: allowMultiObject,
     );
-    if (main == null) {
+    if (selectedIds.isEmpty) {
       return _fallback(w.toDouble(), h.toDouble());
     }
 
     final keepPoints = _buildKeepPoints(
+      labels: labels,
+      gridW: gridW,
+      gridH: gridH,
       gridStep: gridStep,
-      component: main,
+      selectedIds: selectedIds,
     );
     if (keepPoints.length < 20) {
       return _fallback(w.toDouble(), h.toDouble());
@@ -207,14 +212,33 @@ class AutoAssistService {
     return hits;
   }
 
-  _Component? _selectMainComponent({
+  Set<int> _selectComponentIds({
     required List<_Component> components,
     required Map<int, int> keepHits,
     required Map<int, int> eraseHits,
     required double gridCenterX,
     required double gridCenterY,
     required int minArea,
+    required bool allowMultiObject,
   }) {
+    final selected = <int>{};
+
+    if (allowMultiObject && keepHits.isNotEmpty) {
+      for (final c in components) {
+        if (c.area < minArea) {
+          continue;
+        }
+        final keep = keepHits[c.id] ?? 0;
+        final erase = eraseHits[c.id] ?? 0;
+        if (keep > 0 && erase == 0) {
+          selected.add(c.id);
+        }
+      }
+      if (selected.isNotEmpty) {
+        return selected;
+      }
+    }
+
     _Component? best;
     var bestScore = double.negativeInfinity;
 
@@ -241,24 +265,44 @@ class AutoAssistService {
       }
     }
 
-    return best;
+    if (best == null) {
+      return selected;
+    }
+    selected.add(best.id);
+    return selected;
   }
 
   List<Offset> _buildKeepPoints({
+    required List<int> labels,
+    required int gridW,
+    required int gridH,
     required int gridStep,
-    required _Component component,
+    required Set<int> selectedIds,
   }) {
     final points = <Offset>[];
-    final spacing = component.area > 50000 ? 2 : 1;
+    var totalArea = 0;
+    for (var gy = 0; gy < gridH; gy++) {
+      for (var gx = 0; gx < gridW; gx++) {
+        if (selectedIds.contains(labels[gy * gridW + gx])) {
+          totalArea++;
+        }
+      }
+    }
+    final spacing = totalArea > 50000 ? 2 : 1;
 
-    for (var gy = component.minY; gy <= component.maxY; gy++) {
-      for (var gx = component.minX; gx <= component.maxX; gx++) {
-        if ((gx - component.minX) % spacing != 0 ||
-            (gy - component.minY) % spacing != 0) {
+    for (var gy = 0; gy < gridH; gy++) {
+      for (var gx = 0; gx < gridW; gx++) {
+        final id = labels[gy * gridW + gx];
+        if (!selectedIds.contains(id)) {
           continue;
         }
-        points.add(
-            Offset((gx * gridStep).toDouble(), (gy * gridStep).toDouble()));
+        if (spacing > 1 && ((gx + gy) % spacing != 0)) {
+          continue;
+        }
+        points.add(Offset(
+          (gx * gridStep).toDouble(),
+          (gy * gridStep).toDouble(),
+        ));
       }
     }
 

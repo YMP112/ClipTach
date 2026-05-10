@@ -12,6 +12,13 @@ import '../domain/editor_state.dart';
 import 'widgets/canvas_view.dart';
 import 'widgets/top_toolbar.dart';
 
+String _formatUiError(Object error) {
+  if (error is StateError) {
+    return error.message;
+  }
+  return error.toString();
+}
+
 enum EditorLaunchActionType { none, openImage, loadProject, loadProjectPath }
 
 class EditorLaunchAction {
@@ -89,7 +96,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(content: Text(_formatUiError(e))),
         );
       }
     });
@@ -262,7 +269,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(_formatUiError(e))),
       );
     }
   }
@@ -389,13 +396,27 @@ class _MaskControls extends StatelessWidget {
                               return;
                             }
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.toString())),
+                              SnackBar(content: Text(_formatUiError(e))),
                             );
                           }
                         }
                       : null,
                   icon: const Icon(Icons.auto_fix_high),
                   label: Text(loc.t('autoAssist')),
+                ),
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: state.autoAssistMultiObject,
+                      onChanged: state.hasImage
+                          ? (value) => controller
+                              .setAutoAssistMultiObject(value ?? false)
+                          : null,
+                    ),
+                    Text(loc.t('autoAssistMultiObject')),
+                  ],
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(

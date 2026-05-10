@@ -23,9 +23,8 @@ class BrushStroke {
   Map<String, dynamic> toJson() {
     return {
       'brushSize': brushSize,
-      'points': points
-          .map((p) => {'x': p.dx, 'y': p.dy})
-          .toList(growable: false),
+      'points':
+          points.map((p) => {'x': p.dx, 'y': p.dy}).toList(growable: false),
     };
   }
 
@@ -153,6 +152,7 @@ class EditorState {
     this.objectBaseHeight = 1,
     this.objectPivotX = 0,
     this.objectPivotY = 0,
+    this.autoAssistMultiObject = false,
     this.undoStack = const <EditorSnapshot>[],
     this.redoStack = const <EditorSnapshot>[],
   });
@@ -174,6 +174,7 @@ class EditorState {
   final double objectBaseHeight;
   final double objectPivotX;
   final double objectPivotY;
+  final bool autoAssistMultiObject;
   final List<EditorSnapshot> undoStack;
   final List<EditorSnapshot> redoStack;
 
@@ -197,6 +198,7 @@ class EditorState {
     double? objectBaseHeight,
     double? objectPivotX,
     double? objectPivotY,
+    bool? autoAssistMultiObject,
     List<EditorSnapshot>? undoStack,
     List<EditorSnapshot>? redoStack,
     bool clearExtractedImage = false,
@@ -220,6 +222,8 @@ class EditorState {
       objectBaseHeight: objectBaseHeight ?? this.objectBaseHeight,
       objectPivotX: objectPivotX ?? this.objectPivotX,
       objectPivotY: objectPivotY ?? this.objectPivotY,
+      autoAssistMultiObject:
+          autoAssistMultiObject ?? this.autoAssistMultiObject,
       undoStack: undoStack ?? this.undoStack,
       redoStack: redoStack ?? this.redoStack,
     );

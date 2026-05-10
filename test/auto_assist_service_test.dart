@@ -51,6 +51,47 @@ void main() {
     );
     expect(objectCoverage, greaterThan(0.75));
   });
+
+  test('auto assist supports selecting multiple objects from keep hints',
+      () async {
+    final image = await _buildSyntheticScene();
+    addTearDown(image.dispose);
+
+    final service = AutoAssistService();
+    final suggestion = await service.suggest(
+      image,
+      allowMultiObject: true,
+      keepHints: const <BrushStroke>[
+        BrushStroke(points: <Offset>[Offset(40, 50)], brushSize: 12),
+        BrushStroke(points: <Offset>[Offset(190, 60)], brushSize: 12),
+      ],
+    );
+
+    final processing = ImageProcessingService();
+    final mask = await processing.buildMaskImage(
+      source: image,
+      keepStrokes: suggestion.keepStrokes,
+      eraseStrokes: suggestion.eraseStrokes,
+    );
+    addTearDown(mask.dispose);
+
+    final leftCoverage = await _coverageInRect(
+      mask,
+      const Rect.fromLTWH(20, 20, 88, 94),
+    );
+    final rightCoverage = await _coverageInRect(
+      mask,
+      const Rect.fromLTWH(165, 35, 56, 56),
+    );
+    final fullCoverage = await _coverageInRect(
+      mask,
+      const Rect.fromLTWH(0, 0, 240, 140),
+    );
+
+    expect(leftCoverage, greaterThan(0.65));
+    expect(rightCoverage, greaterThan(0.65));
+    expect(fullCoverage, lessThan(0.7));
+  });
 }
 
 double _meanX(List<Offset> points) {

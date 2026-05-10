@@ -6,6 +6,16 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-10
+
+### Added
+- Multi-object auto-assist mode (`Multi Object`) to select multiple components from keep hints in a single run.
+- Regression test coverage for multi-object auto-assist behavior.
+
+### Changed
+- Auto-assist keep-fill now follows detected component pixels instead of filling entire component bounding boxes.
+- This reduces accidental full-image marking on complex backgrounds.
+
 ## [1.1.0] - 2026-04-23
 
 ### Added
@@ -29,6 +39,7 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 - Save/load project support and recent projects list.
 - Auto-assist baseline workflow for initial object marking.
 
-[Unreleased]: https://github.com/YMP112/ClipTach/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/YMP112/ClipTach/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/YMP112/ClipTach/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/YMP112/ClipTach/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/YMP112/ClipTach/releases/tag/v1.0.0
